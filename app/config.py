@@ -20,9 +20,9 @@ class Settings(BaseSettings):
         jwt_secret_key: Secret key untuk signing JWT token.
         jwt_expire_minutes: Masa berlaku JWT token dalam menit (default 8 jam).
     """
-    app_name: str = "Budget Simulator YPII"
+    app_name: str = "Budget Simulator"
     budget_year: str = "2025-2026"
-    database_url: str = "sqlite:///./budget_ypii.db"
+    database_url: str = "sqlite:///./budget.db"
     debug: bool = False
 
     # Auth

@@ -1,5 +1,5 @@
 """
-Entry point aplikasi FastAPI — Budget Simulator YPII.
+Entry point aplikasi FastAPI — Budget Simulator.
 
 Mendaftarkan semua router, mengatur CORS, dan menginisialisasi tabel database
 pada saat aplikasi pertama kali dijalankan (lifespan).
@@ -32,9 +32,9 @@ from .routers import (
     users_router,
     database_router,
 )
-from .crud.income_category import seed_ypii_defaults as seed_income_categories
-from .crud.investment_category import seed_ypii_defaults as seed_investment_categories
-from .crud.expense_category import seed_ypii_defaults as seed_expense_categories
+from .crud.income_category import seed_defaults as seed_income_categories
+from .crud.investment_category import seed_defaults as seed_investment_categories
+from .crud.expense_category import seed_defaults as seed_expense_categories
 from .crud.income_category import get_code_to_id_map
 from .crud.user import create_or_update_admin
 
@@ -48,18 +48,18 @@ async def lifespan(app: FastAPI):
         # Semai kategori pendapatan terlebih dahulu (diperlukan FK dari ExpenseCategory)
         n_income = seed_income_categories(db)
         if n_income:
-            print(f"[startup] Seeded {n_income} default income categories (YPII)")
+            print(f"[startup] Seeded {n_income} default income categories")
 
         # Semai kategori investasi
         n_invest = seed_investment_categories(db)
         if n_invest:
-            print(f"[startup] Seeded {n_invest} default investment categories (YPII)")
+            print(f"[startup] Seeded {n_invest} default investment categories")
 
         # Semai kategori biaya (butuh income_code_to_id map untuk FK)
         income_code_to_id = get_code_to_id_map(db)
         n_expense = seed_expense_categories(db, income_code_to_id)
         if n_expense:
-            print(f"[startup] Seeded {n_expense} default expense categories (YPII)")
+            print(f"[startup] Seeded {n_expense} default expense categories")
 
         # Buat/update akun admin dari env ADMIN_PASSWORD
         create_or_update_admin(db, settings.admin_password)
@@ -72,8 +72,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     description=(
-        "API backend simulasi Rencana Anggaran Belanja (RAB) "
-        "Yayasan Penyelenggaraan Ilahi Indonesia (YPII). "
+        "API backend simulasi Rencana Anggaran Belanja (RAB). "
         f"Tahun Anggaran: **{settings.budget_year}**."
     ),
     version="2.0.0",

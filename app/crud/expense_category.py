@@ -1,7 +1,7 @@
 """
-CRUD untuk ExpenseCategory dan seed data default YPII.
+CRUD untuk ExpenseCategory dan seed data default.
 
-seed_ypii_defaults() menyemai kategori biaya standar YPII jika tabel masih kosong.
+seed_defaults() menyemai kategori biaya standar jika tabel masih kosong.
 Urutan seeding: IncomeCategory harus ada terlebih dahulu (untuk FK maps_to_income_category_id).
 """
 from sqlalchemy.orm import Session
@@ -52,10 +52,10 @@ def delete_all(db: Session) -> None:
     db.commit()
 
 
-# ── Default YPII expense categories ──────────────────────────────────────────
+# ── Default expense categories ───────────────────────────────────────────────
 # income_category_id akan di-resolve saat seed (berdasarkan code)
 
-_YPII_EXPENSE_DEFAULTS: list[dict] = [
+_DEFAULT_EXPENSE_CATEGORIES: list[dict] = [
     # ── Operasional: Biaya Gaji (5110) ──
     {"code": "5110.01", "label": "Gaji", "is_operational": True, "is_up_component": False, "sort_order": 10},
     {"code": "5110.02", "label": "Honor", "is_operational": True, "is_up_component": False, "sort_order": 11},
@@ -119,9 +119,9 @@ _YPII_EXPENSE_DEFAULTS: list[dict] = [
 ]
 
 
-def seed_ypii_defaults(db: Session, income_code_to_id: dict[str, int]) -> int:
+def seed_defaults(db: Session, income_code_to_id: dict[str, int]) -> int:
     """
-    Semai kategori biaya standar YPII jika tabel masih kosong.
+    Semai kategori biaya standar jika tabel masih kosong.
 
     Args:
         db: Database session.
@@ -133,7 +133,7 @@ def seed_ypii_defaults(db: Session, income_code_to_id: dict[str, int]) -> int:
     if count(db) > 0:
         return 0
     inserted = 0
-    for item in _YPII_EXPENSE_DEFAULTS:
+    for item in _DEFAULT_EXPENSE_CATEGORIES:
         data = {k: v for k, v in item.items() if not k.startswith("_")}
         # Resolve FK ke IncomeCategory
         maps_code = item.get("_maps_to_income_code")

@@ -1,5 +1,5 @@
 """
-CRUD untuk IncomeCategory dan seed data default YPII.
+CRUD untuk IncomeCategory dan seed data default.
 """
 from sqlalchemy.orm import Session
 
@@ -55,7 +55,7 @@ def get_code_to_id_map(db: Session) -> dict[str, int]:
     return {row.code: row.id for row in rows}
 
 
-_YPII_INCOME_DEFAULTS: list[dict] = [
+_DEFAULT_INCOME_CATEGORIES: list[dict] = [
     # Simulated (UP/US/From Expense)
     {"code": "4110.01", "label": "Uang Pangkal (UP)", "calc_method": IncomeCalcMethod.SIMULATED_UP, "sort_order": 10},
     {"code": "4120.01", "label": "Uang Sekolah (US)", "calc_method": IncomeCalcMethod.SIMULATED_US, "sort_order": 20},
@@ -82,9 +82,9 @@ _YPII_INCOME_DEFAULTS: list[dict] = [
 ]
 
 
-def seed_ypii_defaults(db: Session) -> int:
+def seed_defaults(db: Session) -> int:
     """
-    Semai kategori pendapatan standar YPII jika tabel masih kosong.
+    Semai kategori pendapatan standar jika tabel masih kosong.
 
     Returns:
         Jumlah baris yang disisipkan.
@@ -92,7 +92,7 @@ def seed_ypii_defaults(db: Session) -> int:
     if count(db) > 0:
         return 0
     inserted = 0
-    for item in _YPII_INCOME_DEFAULTS:
+    for item in _DEFAULT_INCOME_CATEGORIES:
         db.add(IncomeCategory(**item))
         inserted += 1
     db.commit()

@@ -14,7 +14,7 @@ def _create_unit(client, code="SD-TEST", name="SD Test", city="Bandung"):
     })
 
 
-def _create_cabang(client, code="CABANG-BDG", name="YPII Bandung"):
+def _create_cabang(client, code="CABANG-BDG", name="Bandung"):
     return client.post("/organizations", json={
         "code": code,
         "name": name,
@@ -48,7 +48,7 @@ class TestCreateOrganization:
         assert resp.json()["code"] == "SD-LOWER"
 
     def test_create_with_parent(self, client):
-        cabang = _create_cabang(client, code="CABANG-SMG", name="YPII Semarang")
+        cabang = _create_cabang(client, code="CABANG-SMG", name="Semarang")
         parent_id = cabang.json()["id"]
         resp = client.post("/organizations", json={
             "code": "SD-SMG-01",

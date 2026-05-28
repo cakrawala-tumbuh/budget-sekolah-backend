@@ -1,5 +1,5 @@
 """
-CRUD untuk InvestmentCategory dan seed data default YPII.
+CRUD untuk InvestmentCategory dan seed data default.
 """
 from sqlalchemy.orm import Session
 
@@ -49,7 +49,7 @@ def delete_all(db: Session) -> None:
     db.commit()
 
 
-_YPII_INVESTMENT_DEFAULTS: list[dict] = [
+_DEFAULT_INVESTMENT_CATEGORIES: list[dict] = [
     {"code": "1330.01", "label": "Inventaris Kendaraan", "default_economic_life": 5, "sort_order": 1},
     {"code": "1330.02", "label": "Inventaris Kantor", "default_economic_life": 4, "sort_order": 2},
     {"code": "1330.03", "label": "Inventaris Meubelair", "default_economic_life": 8, "sort_order": 3},
@@ -61,9 +61,9 @@ _YPII_INVESTMENT_DEFAULTS: list[dict] = [
 ]
 
 
-def seed_ypii_defaults(db: Session) -> int:
+def seed_defaults(db: Session) -> int:
     """
-    Semai kategori investasi standar YPII jika tabel masih kosong.
+    Semai kategori investasi standar jika tabel masih kosong.
 
     Returns:
         Jumlah baris yang disisipkan.
@@ -71,7 +71,7 @@ def seed_ypii_defaults(db: Session) -> int:
     if count(db) > 0:
         return 0
     inserted = 0
-    for item in _YPII_INVESTMENT_DEFAULTS:
+    for item in _DEFAULT_INVESTMENT_CATEGORIES:
         db.add(InvestmentCategory(**item))
         inserted += 1
     db.commit()

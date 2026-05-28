@@ -1,1 +1,1 @@
-"""Budget Backend YPII — package root."""
+"""Budget Backend — package root."""

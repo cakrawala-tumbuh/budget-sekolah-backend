@@ -29,7 +29,7 @@ class ExpenseCategory(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
 
-    # Kode akun YPII, e.g. "5130.01" atau "5110" (untuk kelompok)
+    # Kode akun, e.g. "5130.01" atau "5110" (untuk kelompok)
     code: Mapped[str] = mapped_column(String(20), nullable=False, unique=True, index=True)
     label: Mapped[str] = mapped_column(String(200), nullable=False)
 

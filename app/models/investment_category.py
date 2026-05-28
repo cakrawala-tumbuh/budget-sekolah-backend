@@ -23,7 +23,7 @@ class InvestmentCategory(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
 
-    # Kode akun YPII, e.g. "1330.01"
+    # Kode akun, e.g. "1330.01"
     code: Mapped[str] = mapped_column(String(20), nullable=False, unique=True, index=True)
     label: Mapped[str] = mapped_column(String(200), nullable=False)
 

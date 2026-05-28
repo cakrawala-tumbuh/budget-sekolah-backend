@@ -3,11 +3,11 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.backends.legacy:build"
 
 [project]
-name = "budget-backend-ypii"
+name = "budget-backend"
 version = "1.0.0"
-description = "Backend simulasi Rencana Anggaran Belanja (RAB) Yayasan Penyelenggaraan Ilahi Indonesia"
+description = "Backend simulasi Rencana Anggaran Belanja (RAB)"
 requires-python = ">=3.11"
-authors = [{ name = "YPII" }]
+authors = []
 license = { text = "Proprietary" }
 
 [project.optional-dependencies]

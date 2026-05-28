@@ -7,7 +7,7 @@ Endpoint:
   POST   /expense-categories                  — buat kategori baru
   PUT    /expense-categories/{category_id}    — update kategori
   DELETE /expense-categories/{category_id}    — hapus kategori
-  POST   /expense-categories/seed-defaults    — semai ulang default YPII
+  POST   /expense-categories/seed-defaults    — semai ulang default
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -63,8 +63,8 @@ def delete_category(category_id: int, db: Session = Depends(get_db)):
 
 @router.post("/seed-defaults", status_code=status.HTTP_200_OK)
 def seed_defaults(db: Session = Depends(get_db)):
-    """Hapus semua kategori biaya lalu semai ulang default YPII."""
+    """Hapus semua kategori biaya lalu semai ulang default."""
     crud.delete_all(db)
     income_code_to_id = income_crud.get_code_to_id_map(db)
-    inserted = crud.seed_ypii_defaults(db, income_code_to_id)
-    return {"message": f"Seeded {inserted} default YPII expense categories"}
+    inserted = crud.seed_defaults(db, income_code_to_id)
+    return {"message": f"Seeded {inserted} default expense categories"}

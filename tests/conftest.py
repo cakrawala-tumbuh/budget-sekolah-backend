@@ -13,11 +13,11 @@ from app.models.user import User, UserRole
 # Ensure all models are imported before create_all is called
 import app.models as _models  # noqa: F401
 from app.crud.income_category import (
-    seed_ypii_defaults as _seed_income,
+    seed_defaults as _seed_income,
     get_code_to_id_map as _income_code_to_id_map,
 )
-from app.crud.investment_category import seed_ypii_defaults as _seed_invest
-from app.crud.expense_category import seed_ypii_defaults as _seed_expense
+from app.crud.investment_category import seed_defaults as _seed_invest
+from app.crud.expense_category import seed_defaults as _seed_expense
 
 # SQLite in-memory with a shared connection — all sessions use the same connection
 # so that tables created in engine_fixture remain visible in db_session.
@@ -39,7 +39,7 @@ def engine_fixture():
 
     Base.metadata.create_all(bind=eng)
 
-    # Seed default YPII categories into the test DB
+    # Seed default categories into the test DB
     SeedSession = sessionmaker(bind=eng)
     seed_db = SeedSession()
     try:

@@ -18,10 +18,10 @@ from fastapi.responses import StreamingResponse
 
 from ..auth import require_admin
 from ..config import settings
-from ..crud.expense_category import seed_ypii_defaults as seed_expense_categories
+from ..crud.expense_category import seed_defaults as seed_expense_categories
 from ..crud.income_category import get_code_to_id_map
-from ..crud.income_category import seed_ypii_defaults as seed_income_categories
-from ..crud.investment_category import seed_ypii_defaults as seed_investment_categories
+from ..crud.income_category import seed_defaults as seed_income_categories
+from ..crud.investment_category import seed_defaults as seed_investment_categories
 from ..crud.user import create_or_update_admin
 from ..database import Base, SessionLocal, engine
 from ..models.user import User
@@ -112,7 +112,7 @@ def backup_database(current_user: User = Depends(require_admin)):
         )
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    filename = f"backup_budget_ypii_{timestamp}.db"
+    filename = f"backup_budget_{timestamp}.db"
 
     try:
         buf = io.BytesIO()

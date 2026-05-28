@@ -7,7 +7,7 @@ Semua rate divalidasi dalam rentang 0.0–1.0.
 """
 from pydantic import BaseModel, field_validator
 
-from ..models.contribution_rate import RATE_KEYS, DEFAULT_RATES
+from ..models.contribution_rate import DEFAULT_RATES
 
 
 class ContributionRateSet(BaseModel):

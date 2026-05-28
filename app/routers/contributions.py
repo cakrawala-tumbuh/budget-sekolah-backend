@@ -7,7 +7,7 @@ from ..crud import misc as crud, organization as org_crud
 from ..models.organization import OrgType
 from ..schemas.contribution import (
     ContributionRateSet, ContributionRateRead,
-    ContributionAllocationCreate, ContributionAllocationUpdate, ContributionAllocationRead,
+    ContributionAllocationCreate, ContributionAllocationRead,
 )
 
 router = APIRouter(tags=["Contributions"], dependencies=[Depends(get_org_access)])

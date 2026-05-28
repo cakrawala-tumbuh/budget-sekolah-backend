@@ -13,7 +13,7 @@ from ..auth import get_org_access
 from ..database import get_db
 from ..crud import grade_config as crud, organization as org_crud
 from ..models.organization import OrgType
-from ..schemas.grade_config import GradeConfigCreate, GradeConfigUpdate, GradeConfigRead
+from ..schemas.grade_config import GradeConfigCreate, GradeConfigRead
 
 router = APIRouter(
     prefix="/organizations/{org_id}/grade-config",

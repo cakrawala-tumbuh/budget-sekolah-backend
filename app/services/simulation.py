@@ -11,7 +11,6 @@ from ..crud import investment as crud_inv, misc as crud_misc, income_entry as cr
 from ..crud import parent_expense_allocation as crud_pea
 from ..models.organization import Organization, OrgType
 from ..models.income_category import IncomeCalcMethod
-from ..models.expense_category import ExpenseCategory
 from ..schemas.simulation import (
     UPComponentItem, UPSimulation,
     USComponentItem, USSimulation,

@@ -218,10 +218,10 @@ class TestParentExpenseAllocationSimulation:
     def test_inactive_allocation_not_included(self, client):
         """Alokasi yang is_active=False tidak dihitung dalam simulasi."""
         cabang_id, unit_a, unit_b, cat_gaji, cat_dev = self._setup_scenario(client)
-        created = client.post(
+        client.post(
             f"/organizations/{cabang_id}/parent-expense-allocations",
             json={"expense_category_id": cat_gaji, "affects_up": False, "is_active": False},
-        ).json()
+        )
 
         resp = client.get(f"/organizations/{unit_a}/simulation/us")
         data = resp.json()

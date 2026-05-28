@@ -63,7 +63,7 @@ async def lifespan(app: FastAPI):
 
         # Buat/update akun admin dari env ADMIN_PASSWORD
         create_or_update_admin(db, settings.admin_password)
-        print(f"[startup] Admin user ready (username: admin)")
+        print("[startup] Admin user ready (username: admin)")
     finally:
         db.close()
     yield

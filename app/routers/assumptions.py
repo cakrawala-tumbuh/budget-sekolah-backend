@@ -5,7 +5,7 @@ from ..auth import get_org_access
 from ..database import get_db
 from ..crud import assumption as crud, organization as org_crud
 from ..models.organization import OrgType
-from ..schemas.assumption import UnitAssumptionCreate, UnitAssumptionUpdate, UnitAssumptionRead
+from ..schemas.assumption import UnitAssumptionCreate, UnitAssumptionRead
 
 router = APIRouter(
     prefix="/organizations/{org_id}/assumption",

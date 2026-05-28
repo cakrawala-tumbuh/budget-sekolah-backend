@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import generate_random_password, get_current_user, require_admin
 from ..crud import organization as crud
-from ..crud.user import create_user, get_by_org_id
+from ..crud.user import create_user
 from ..database import get_db
 from ..models.user import UserRole
 from ..schemas.organization import (

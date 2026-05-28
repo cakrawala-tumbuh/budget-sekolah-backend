@@ -56,9 +56,27 @@ class TestUPSimulation:
         data = resp.json()
         # Only 5130.01 = 36_000_000; no investments -> total_up_cost = 36_000_000
         assert data["total_up_cost"] == 36_000_000.0
+        assert data["new_investment_dep"] == 0.0
+        assert data["old_asset_dep"] == 0.0
         # auto_up_rate = 36_000_000 / 60 = 600_000
         assert data["auto_up_rate"] == 600_000.0
         assert data["total_up_revenue"] == 36_000_000.0
+
+    def test_up_includes_old_asset_depreciation(self, client):
+        org_id = _setup_unit(client, "SD-SIM-UP4")
+        # Existing asset: 8_000_000 / 4 years, acquired 2024 -> dep_current_year = 2_000_000
+        client.post(f"/organizations/{org_id}/depreciation", json={
+            "asset_name": "Komputer Lama", "acquisition_cost": 8_000_000.0,
+            "useful_life": 4, "acquisition_year": 2024,
+        })
+        resp = client.get(f"/organizations/{org_id}/simulation/up")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()
+        assert data["old_asset_dep"] == 2_000_000.0
+        # total_up_cost_with_dep = 36_000_000 + 0 (no new inv) + 2_000_000
+        assert data["total_up_cost_with_dep"] == 38_000_000.0
+        # auto_up_rate = 38_000_000 / 60
+        assert abs(data["auto_up_rate"] - 38_000_000.0 / 60) < 1.0
 
     def test_up_with_override(self, client):
         org_id = _setup_unit(client, "SD-SIM-UP2")

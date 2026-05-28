@@ -168,7 +168,10 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
         total_up_cost += item.total
 
     new_investment_dep = sum(i.dep_current_year for i in investments)
-    total_up_cost_with_dep = total_up_cost + new_investment_dep
+    fiscal_year = _fiscal_year(settings.budget_year)
+    old_assets = crud_misc.list_dep_by_org(db, org.id)
+    old_asset_dep = sum(old.dep_current_year(fiscal_year) for old in old_assets)
+    total_up_cost_with_dep = total_up_cost + new_investment_dep + old_asset_dep
     new_student_count = (assumption.new_student_count if assumption else 0) or 1
     auto_up_rate = total_up_cost_with_dep / new_student_count
     override = assumption.override_up_rate if assumption else None
@@ -180,6 +183,7 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
         total_up_cost=total_up_cost,
         parent_allocated_up_cost=parent_allocated_up_cost,
         new_investment_dep=new_investment_dep,
+        old_asset_dep=old_asset_dep,
         total_up_cost_with_dep=total_up_cost_with_dep,
         new_student_count=new_student_count,
         auto_up_rate=auto_up_rate,

@@ -89,8 +89,36 @@ class TestUPSimulation:
         })
         resp = client.get(f"/organizations/{org_id}/simulation/up")
         data = resp.json()
+        # Tidak ada depresiasi: final_up_rate = override + 0 = override
+        assert data["new_investment_dep"] == 0.0
+        assert data["old_asset_dep"] == 0.0
         assert data["final_up_rate"] == 1_000_000.0
         assert data["total_up_revenue"] == 60_000_000.0
+
+    def test_up_override_always_includes_dep(self, client):
+        """Override hanya menggantikan komponen biaya; depresiasi selalu ditambah di atas."""
+        org_id = _setup_unit(client, "SD-SIM-UP5")
+        # Set override
+        client.put(f"/organizations/{org_id}/assumption", json={
+            "grade_1": 60, "grade_2": 0, "grade_3": 0,
+            "grade_4": 0, "grade_5": 0, "grade_6": 0,
+            "new_student_count": 60, "returning_student_count": 0,
+            "staff_count": 5,
+            "override_up_rate": 1_000_000.0,
+        })
+        # Old asset: 12_000_000 / 4 years, acquired 2024 -> dep_current_year = 3_000_000
+        client.post(f"/organizations/{org_id}/depreciation", json={
+            "asset_name": "Komputer Lama", "acquisition_cost": 12_000_000.0,
+            "useful_life": 4, "acquisition_year": 2024,
+        })
+        resp = client.get(f"/organizations/{org_id}/simulation/up")
+        data = resp.json()
+        dep = data["old_asset_dep"]
+        assert dep == 3_000_000.0
+        dep_per_student = dep / 60
+        # final_up_rate = override + dep/siswa_baru
+        assert abs(data["final_up_rate"] - (1_000_000.0 + dep_per_student)) < 1.0
+        assert abs(data["total_up_revenue"] - data["final_up_rate"] * 60) < 1.0
 
     def test_up_only_for_unit(self, client):
         cabang = client.post("/organizations", json={

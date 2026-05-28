@@ -173,9 +173,15 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
     old_asset_dep = sum(old.dep_current_year(fiscal_year) for old in old_assets)
     total_up_cost_with_dep = total_up_cost + new_investment_dep + old_asset_dep
     new_student_count = (assumption.new_student_count if assumption else 0) or 1
+    dep_per_student = (new_investment_dep + old_asset_dep) / new_student_count
     auto_up_rate = total_up_cost_with_dep / new_student_count
+    # Override hanya menggantikan komponen biaya (5130.xx + alokasi induk).
+    # Depresiasi aset baru dan lama selalu ditambahkan ke tarif akhir,
+    # sehingga perubahan data depresiasi selalu tercermin pada besaran UP.
     override = assumption.override_up_rate if assumption else None
-    final_up_rate = override if override is not None else auto_up_rate
+    auto_component_rate = total_up_cost / new_student_count
+    component_rate = override if override is not None else auto_component_rate
+    final_up_rate = component_rate + dep_per_student
     total_up_revenue = final_up_rate * new_student_count
 
     return UPSimulation(

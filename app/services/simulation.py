@@ -146,7 +146,7 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
 
     agg = _aggregate_entries(entries)
     components = []
-    total_up_cost = 0.0
+    total_own_up_cost = 0.0
 
     for cid, data in sorted(agg.items()):
         cat = data["category"]
@@ -159,13 +159,11 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
                 total_bos=data["total_bos"],
                 total=total,
             ))
-            total_up_cost += total
+            total_own_up_cost += total
 
-    # Tambahkan komponen UP yang dialokasikan dari organisasi induk
-    parent_up_components, _, parent_allocated_up_cost, _ = _get_parent_allocated_components(db, org)
-    for item in parent_up_components:
-        components.append(item)
-        total_up_cost += item.total
+    # Komponen UP yang dialokasikan dari organisasi induk (ditampilkan terpisah)
+    allocated_up_components, _, parent_allocated_up_cost, _ = _get_parent_allocated_components(db, org)
+    total_up_cost = total_own_up_cost + parent_allocated_up_cost
 
     new_investment_dep = sum(i.dep_current_year for i in investments)
     fiscal_year = _fiscal_year(settings.budget_year)
@@ -186,6 +184,7 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
 
     return UPSimulation(
         components=components,
+        allocated_components=allocated_up_components,
         total_up_cost=total_up_cost,
         parent_allocated_up_cost=parent_allocated_up_cost,
         new_investment_dep=new_investment_dep,
@@ -204,7 +203,7 @@ def simulate_us(db: Session, org: Organization) -> USSimulation:
 
     agg = _aggregate_entries(entries)
     components = []
-    total_us_cost = 0.0
+    total_own_us_cost = 0.0
 
     for cid, data in sorted(agg.items()):
         cat = data["category"]
@@ -219,13 +218,11 @@ def simulate_us(db: Session, org: Organization) -> USSimulation:
                 total_bos=data["total_bos"],
                 total=total,
             ))
-            total_us_cost += total
+            total_own_us_cost += total
 
-    # Tambahkan komponen US yang dialokasikan dari organisasi induk
-    _, parent_us_components, _, parent_allocated_us_cost = _get_parent_allocated_components(db, org)
-    for item in parent_us_components:
-        components.append(item)
-        total_us_cost += item.total
+    # Komponen US yang dialokasikan dari organisasi induk (ditampilkan terpisah)
+    _, allocated_us_components, _, parent_allocated_us_cost = _get_parent_allocated_components(db, org)
+    total_us_cost = total_own_us_cost + parent_allocated_us_cost
 
     total_students = (assumption.total_students if assumption else 0) or 1
     months = 12
@@ -236,6 +233,7 @@ def simulate_us(db: Session, org: Organization) -> USSimulation:
 
     return USSimulation(
         components=components,
+        allocated_components=allocated_us_components,
         total_us_cost=total_us_cost,
         parent_allocated_us_cost=parent_allocated_us_cost,
         total_students=total_students,

@@ -15,8 +15,10 @@ class UPComponentItem(BaseModel):
 
 class UPSimulation(BaseModel):
     components: list[UPComponentItem]
+    # Komponen biaya UP yang dialokasikan dari organisasi induk (Cabang/Pusat)
+    allocated_components: list[UPComponentItem]
     total_up_cost: float
-    # Biaya UP yang dialokasikan dari organisasi induk (Cabang/Pusat)
+    # Total biaya UP yang dialokasikan dari organisasi induk (Cabang/Pusat)
     parent_allocated_up_cost: float
     new_investment_dep: float
     old_asset_dep: float
@@ -39,8 +41,10 @@ class USComponentItem(BaseModel):
 
 class USSimulation(BaseModel):
     components: list[USComponentItem]
+    # Komponen biaya US yang dialokasikan dari organisasi induk (Cabang/Pusat)
+    allocated_components: list[USComponentItem]
     total_us_cost: float
-    # Biaya US yang dialokasikan dari organisasi induk (Cabang/Pusat)
+    # Total biaya US yang dialokasikan dari organisasi induk (Cabang/Pusat)
     parent_allocated_us_cost: float
     total_students: int
     months: int                    # always 12

@@ -177,8 +177,8 @@ class TestParentExpenseAllocationSimulation:
         assert abs(data["parent_allocated_up_cost"] - 14_400_000.0) < 1.0
         assert abs(data["total_up_cost"] - 14_400_000.0) < 1.0
 
-        # Pastikan komponen [Alokasi Induk] ada di list
-        alloc_items = [c for c in data["components"] if c["account_code"].startswith("ALLOC:")]
+        # Pastikan komponen [Alokasi Induk] ada di allocated_components
+        alloc_items = [c for c in data["allocated_components"] if c["account_code"].startswith("ALLOC:")]
         assert len(alloc_items) == 1
         assert abs(alloc_items[0]["total"] - 14_400_000.0) < 1.0
 
@@ -212,7 +212,7 @@ class TestParentExpenseAllocationSimulation:
         assert abs(data["parent_allocated_us_cost"] - expected_us) < 1.0
         assert abs(data["total_us_cost"] - expected_us) < 1.0
 
-        alloc_items = [c for c in data["components"] if c["account_code"].startswith("ALLOC:")]
+        alloc_items = [c for c in data["allocated_components"] if c["account_code"].startswith("ALLOC:")]
         assert len(alloc_items) == 1
 
     def test_inactive_allocation_not_included(self, client):

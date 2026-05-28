@@ -68,10 +68,17 @@ _DEFAULT_INCOME_CATEGORIES: list[dict] = [
     {"code": "4120.03", "label": "Uang Mandarin", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 22},
     {"code": "4120.04", "label": "Uang Perpustakaan", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 23},
     {"code": "4120.05", "label": "Denda Uang Sekolah", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 24},
+    {"code": "4120.06", "label": "Pendapatan Day Care/Student Care", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 25},
     {"code": "4160.02", "label": "Kegiatan Lain", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 51},
+    {"code": "4160.03", "label": "Pendapatan Uang Student Care", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 52},
     {"code": "4500.01", "label": "Pendapatan Non Operasional", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 60},
+    {"code": "4530.01", "label": "Pendapatan Riso", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 61},
+    {"code": "4530.02", "label": "Pendapatan Koperasi", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 62},
     {"code": "4510.01", "label": "Dana BOS", "calc_method": IncomeCalcMethod.SUM_FROM_BOS, "sort_order": 70},
+    {"code": "4510.02", "label": "Dana BOP", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 71},
+    {"code": "4510.03", "label": "Dana PBOS", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 72},
     {"code": "4610.01", "label": "Sumbangan Pembangunan", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 80},
+    {"code": "4610.02", "label": "Sumbangan Lain", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 81},
     {"code": "4620.01", "label": "Pendapatan Lain-lain", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 90},
     # Kontribusi diterima (CABANG / PUSAT)
     {"code": "4630.01", "label": "Kontribusi UP Diterima", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 100},
@@ -84,16 +91,19 @@ _DEFAULT_INCOME_CATEGORIES: list[dict] = [
 
 def seed_defaults(db: Session) -> int:
     """
-    Semai kategori pendapatan standar jika tabel masih kosong.
+    Semai kategori pendapatan standar. Bersifat additive — hanya menyisipkan
+    kode yang belum ada, tidak menghapus atau mengubah data yang sudah ada.
 
     Returns:
         Jumlah baris yang disisipkan.
     """
-    if count(db) > 0:
-        return 0
+    existing_codes = {cat.code for cat in list_all(db)}
     inserted = 0
     for item in _DEFAULT_INCOME_CATEGORIES:
+        if item["code"] in existing_codes:
+            continue
         db.add(IncomeCategory(**item))
         inserted += 1
-    db.commit()
+    if inserted:
+        db.commit()
     return inserted

@@ -245,6 +245,21 @@ def simulate_us(db: Session, org: Organization) -> USSimulation:
 
 
 def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
+    """
+    Hitung total pendapatan simulasi untuk suatu organisasi.
+
+    Untuk UNIT: UP + US + direct income + BOS + manual income entries.
+    Untuk CABANG/PUSAT: kontribusi UP dan US dari setiap child UNIT
+      (revenue aktual unit × tarif kontribusi unit ke parent ini)
+      ditambah manual income entries.
+
+    Args:
+        db: Database session.
+        org: Organisasi yang disimulasikan.
+
+    Returns:
+        IncomeSimulation dengan daftar item pendapatan dan total.
+    """
     items = []
     total = 0.0
 
@@ -307,27 +322,29 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
                 total += data["total"]
 
     else:
+        # Untuk CABANG/PUSAT: pendapatan berasal dari kontribusi UP dan US
+        # setiap child UNIT, dihitung dari UP/US revenue aktual unit × tarif
+        # kontribusi unit tersebut (bukan dari pengeluaran CABANG sendiri).
         allocations = crud_misc.list_allocations(db, org.id)
-        rates = crud_misc.get_rates(db, org.id)
-        all_entries = crud_entry.list_by_org(db, org.id)
-        agg = _aggregate_entries(all_entries)
-
-        total_op = sum(v["total_yayasan"] + v["total_bos"] for v in agg.values() if v["category"] and v["category"].is_operational)
-        total_non_op = sum(v["total_yayasan"] + v["total_bos"] for v in agg.values() if v["category"] and not v["category"].is_operational)
-        total_us_base = total_op + total_non_op
-
-        total_students_all = sum(a.total_students for a in allocations) or 1
-        total_new_all = sum(a.new_students for a in allocations) or 1
+        up_rate_key = "up_to_cabang" if org.org_type == OrgType.CABANG else "up_to_pusat"
+        us_rate_key = "us_to_cabang" if org.org_type == OrgType.CABANG else "us_to_pusat"
 
         for alloc in allocations:
-            pct_us = alloc.override_pct_us if alloc.override_pct_us is not None else alloc.total_students / total_students_all
-            pct_up = alloc.override_pct_up if alloc.override_pct_up is not None else alloc.new_students / total_new_all
-            contribution_us = pct_us * total_us_base * rates.get("us_to_cabang", 0.10)
-            contribution_up = pct_up * total_us_base * rates.get("up_to_cabang", 0.12)
-            name = alloc.from_organization.name if alloc.from_organization else str(alloc.from_organization_id)
-            items.append(IncomeItem(account_code="4630.01", description=f"Kontribusi UP dari {name}", total=contribution_up))
-            items.append(IncomeItem(account_code="4630.02", description=f"Kontribusi US dari {name}", total=contribution_us))
-            total += contribution_us + contribution_up
+            from_org = alloc.from_organization
+            if from_org is None or from_org.org_type != OrgType.UNIT:
+                continue
+            unit_rates = crud_misc.get_rates(db, from_org.id)
+            up_revenue = simulate_up(db, from_org).total_up_revenue
+            us_revenue = simulate_us(db, from_org).total_us_revenue
+            contribution_up = up_revenue * unit_rates.get(up_rate_key, 0.0)
+            contribution_us = us_revenue * unit_rates.get(us_rate_key, 0.0)
+            name = from_org.name
+            if contribution_up:
+                items.append(IncomeItem(account_code="4630.01", description=f"Kontribusi UP dari {name}", total=contribution_up))
+                total += contribution_up
+            if contribution_us:
+                items.append(IncomeItem(account_code="4630.02", description=f"Kontribusi US dari {name}", total=contribution_us))
+                total += contribution_us
 
         income_entries = crud_income.list_by_org(db, org.id)
         income_agg = defaultdict(lambda: {"total": 0.0, "desc": "", "code": ""})
@@ -423,55 +440,78 @@ def simulate_depreciation(db: Session, org: Organization) -> DepreciationSummary
 
 
 def simulate_allocation(db: Session, org: Organization) -> AllocationSimulation:
+    """
+    Hitung alokasi kontribusi UP dan US dari setiap child UNIT ke org ini.
+
+    Kontribusi dihitung dari UP/US revenue aktual setiap unit dikalikan tarif
+    kontribusi unit tersebut (up_to_cabang/up_to_pusat dan us_to_cabang/us_to_pusat).
+    pct_up/pct_us menunjukkan proporsi revenue unit terhadap total pool.
+
+    Args:
+        db: Database session.
+        org: Organisasi penerima kontribusi (CABANG atau PUSAT).
+
+    Returns:
+        AllocationSimulation dengan rincian kontribusi per unit.
+    """
     allocations = crud_misc.list_allocations(db, org.id)
-    all_entries = crud_entry.list_by_org(db, org.id)
-    agg = _aggregate_entries(all_entries)
+    up_rate_key = "up_to_cabang" if org.org_type == OrgType.CABANG else "up_to_pusat"
+    us_rate_key = "us_to_cabang" if org.org_type == OrgType.CABANG else "us_to_pusat"
 
-    total_op = sum(v["total_yayasan"] + v["total_bos"] for v in agg.values() if v["category"] and v["category"].is_operational)
-    total_non_op = sum(v["total_yayasan"] + v["total_bos"] for v in agg.values() if v["category"] and not v["category"].is_operational)
-    total_biaya_us = total_op + total_non_op
-    investments = crud_inv.list_by_org(db, org.id)
-    total_biaya_up = sum(i.dep_current_year for i in investments)
-
-    total_students_all = sum(a.total_students for a in allocations) or 1
-    total_new_all = sum(a.new_students for a in allocations) or 1
-
-    units = []
-    total_k_us = 0.0
-    total_k_up = 0.0
-    sum_pct_us = 0.0
-    sum_pct_up = 0.0
+    # Pass 1: hitung revenue dan kontribusi per unit
+    unit_data = []
+    total_up_pool = 0.0
+    total_us_pool = 0.0
 
     for alloc in allocations:
-        pct_us = alloc.override_pct_us if alloc.override_pct_us is not None else alloc.total_students / total_students_all
-        pct_up = alloc.override_pct_up if alloc.override_pct_up is not None else alloc.new_students / total_new_all
-        k_us = pct_us * total_biaya_us
-        k_up = pct_up * total_biaya_up
-        total_k_us += k_us
-        total_k_up += k_up
-        sum_pct_us += pct_us
-        sum_pct_up += pct_up
-        name = alloc.from_organization.name if alloc.from_organization else str(alloc.from_organization_id)
+        from_org = alloc.from_organization
+        if from_org is None or from_org.org_type != OrgType.UNIT:
+            continue
+        unit_rates = crud_misc.get_rates(db, from_org.id)
+        up_revenue = simulate_up(db, from_org).total_up_revenue
+        us_revenue = simulate_us(db, from_org).total_us_revenue
+        contribution_up = up_revenue * unit_rates.get(up_rate_key, 0.0)
+        contribution_us = us_revenue * unit_rates.get(us_rate_key, 0.0)
+        total_up_pool += up_revenue
+        total_us_pool += us_revenue
+        unit_data.append({
+            "alloc": alloc,
+            "from_org": from_org,
+            "up_revenue": up_revenue,
+            "us_revenue": us_revenue,
+            "contribution_up": contribution_up,
+            "contribution_us": contribution_us,
+        })
+
+    # Pass 2: hitung pct dan susun hasil
+    units = []
+    total_k_up = 0.0
+    total_k_us = 0.0
+
+    for u in unit_data:
+        alloc = u["alloc"]
+        pct_up = u["up_revenue"] / total_up_pool if total_up_pool > 0 else 0.0
+        pct_us = u["us_revenue"] / total_us_pool if total_us_pool > 0 else 0.0
+        total_k_up += u["contribution_up"]
+        total_k_us += u["contribution_us"]
         units.append(UnitAllocationDetail(
             from_organization_id=alloc.from_organization_id,
-            from_organization_name=name,
+            from_organization_name=u["from_org"].name,
             total_students=alloc.total_students,
             new_students=alloc.new_students,
             pct_us=pct_us,
             pct_up=pct_up,
-            contribution_us=k_us,
-            contribution_up=k_up,
+            contribution_us=u["contribution_us"],
+            contribution_up=u["contribution_up"],
         ))
 
-    is_valid = abs(sum_pct_us - 1.0) < 0.001 and abs(sum_pct_up - 1.0) < 0.001
-
     return AllocationSimulation(
-        total_base_cost_us=total_biaya_us,
-        total_base_cost_up=total_biaya_up,
+        total_base_cost_us=total_us_pool,
+        total_base_cost_up=total_up_pool,
         units=units,
         total_contribution_us=total_k_us,
         total_contribution_up=total_k_up,
-        is_valid=is_valid,
+        is_valid=True,
     )
 
 

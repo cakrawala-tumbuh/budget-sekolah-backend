@@ -214,3 +214,78 @@ class TestBudgetSummary:
         # accrual expenses = cash expenses + depreciation
         expected_accrual = data["total_cash_expenses"] + data["depreciation"]["total_current_year_dep"]
         assert abs(data["total_accrual_expenses"] - expected_accrual) < 0.01
+
+
+class TestCabangIncomeSimulation:
+    """Pendapatan CABANG berasal dari kontribusi UP/US setiap child UNIT."""
+
+    def _setup_cabang_with_unit(self, client, suffix: str):
+        """Buat CABANG dan satu child UNIT dengan data lengkap, lalu daftarkan alokasi."""
+        cabang_id = client.post("/organizations", json={
+            "code": f"CBG-INC-{suffix}", "name": f"Cabang Income {suffix}", "org_type": "CABANG",
+        }).json()["id"]
+
+        unit_id = _setup_unit(client, f"SD-CBG-INC-{suffix}")
+
+        # Tarif kontribusi unit: UP 12% ke cabang, US 10% ke cabang
+        client.put(f"/organizations/{unit_id}/contribution-rates", json={
+            "up_to_pusat": 0.04, "up_to_cabang": 0.12,
+            "us_to_pusat": 0.05, "us_to_cabang": 0.10,
+            "development_fund": 0.20, "deficit_reserve": 0.05,
+            "social_care": 0.03, "teacher_study": 0.03,
+        })
+
+        # Daftarkan unit sebagai kontributor ke cabang
+        client.put(f"/organizations/{cabang_id}/contribution-allocations", json={
+            "from_organization_id": unit_id,
+            "total_students": 326,
+            "new_students": 60,
+        })
+        return cabang_id, unit_id
+
+    def test_cabang_income_uses_unit_up_us_revenue(self, client):
+        """Kontribusi UP/US ke CABANG = revenue aktual unit × tarif unit, bukan pengeluaran cabang."""
+        cabang_id, unit_id = self._setup_cabang_with_unit(client, "A")
+
+        up_revenue = client.get(f"/organizations/{unit_id}/simulation/up").json()["total_up_revenue"]
+        us_revenue = client.get(f"/organizations/{unit_id}/simulation/us").json()["total_us_revenue"]
+        expected_up = up_revenue * 0.12
+        expected_us = us_revenue * 0.10
+
+        resp = client.get(f"/organizations/{cabang_id}/simulation/income")
+        assert resp.status_code == 200
+        data = resp.json()
+
+        total_up = sum(i["total"] for i in data["items"] if i["account_code"] == "4630.01")
+        total_us = sum(i["total"] for i in data["items"] if i["account_code"] == "4630.02")
+        assert abs(total_up - expected_up) < 1.0
+        assert abs(total_us - expected_us) < 1.0
+        assert abs(data["total"] - (expected_up + expected_us)) < 1.0
+
+    def test_cabang_income_zero_without_allocations(self, client):
+        """CABANG tanpa child unit terdaftar menghasilkan total pendapatan 0."""
+        cabang_id = client.post("/organizations", json={
+            "code": "CBG-EMPTY", "name": "Cabang Kosong", "org_type": "CABANG",
+        }).json()["id"]
+        resp = client.get(f"/organizations/{cabang_id}/simulation/income")
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0.0
+
+    def test_allocation_simulation_uses_unit_revenue(self, client):
+        """simulate_allocation menampilkan kontribusi berdasarkan revenue aktual unit."""
+        cabang_id, unit_id = self._setup_cabang_with_unit(client, "B")
+
+        up_revenue = client.get(f"/organizations/{unit_id}/simulation/up").json()["total_up_revenue"]
+        us_revenue = client.get(f"/organizations/{unit_id}/simulation/us").json()["total_us_revenue"]
+
+        resp = client.get(f"/organizations/{cabang_id}/simulation/allocation")
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert len(data["units"]) == 1
+        u = data["units"][0]
+        assert abs(u["contribution_up"] - up_revenue * 0.12) < 1.0
+        assert abs(u["contribution_us"] - us_revenue * 0.10) < 1.0
+        # total_base_cost_up/us = total pool revenue dari semua unit
+        assert abs(data["total_base_cost_up"] - up_revenue) < 1.0
+        assert abs(data["total_base_cost_us"] - us_revenue) < 1.0

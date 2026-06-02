@@ -276,6 +276,7 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
     component_rate = override if override is not None else auto_component_rate
     final_up_rate = component_rate + dep_per_student
     total_up_revenue = final_up_rate * new_student_count
+    auto_up_revenue = auto_up_rate * new_student_count
 
     return UPSimulation(
         components=components,
@@ -293,6 +294,7 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
         auto_up_rate=auto_up_rate,
         final_up_rate=final_up_rate,
         total_up_revenue=total_up_revenue,
+        auto_up_revenue=auto_up_revenue,
     )
 
 
@@ -331,6 +333,7 @@ def simulate_us(db: Session, org: Organization) -> USSimulation:
     override = assumption.override_us_rate if assumption else None
     final_us_rate = override if override is not None else auto_us_rate
     total_us_revenue = final_us_rate * total_students * months
+    auto_us_revenue = auto_us_rate * total_students * months
 
     return USSimulation(
         components=components,
@@ -344,6 +347,7 @@ def simulate_us(db: Session, org: Organization) -> USSimulation:
         auto_us_rate=auto_us_rate,
         final_us_rate=final_us_rate,
         total_us_revenue=total_us_revenue,
+        auto_us_revenue=auto_us_revenue,
     )
 
 
@@ -365,15 +369,24 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
     """
     items = []
     total = 0.0
+    total_auto = 0.0
 
     if org.org_type == OrgType.UNIT:
         up_sim = simulate_up(db, org)
-        items.append(IncomeItem(account_code="4110.01", description="Uang Pangkal (UP)", total=up_sim.total_up_revenue))
+        items.append(IncomeItem(
+            account_code="4110.01", description="Uang Pangkal (UP)",
+            total=up_sim.total_up_revenue, auto_total=up_sim.auto_up_revenue,
+        ))
         total += up_sim.total_up_revenue
+        total_auto += up_sim.auto_up_revenue
 
         us_sim = simulate_us(db, org)
-        items.append(IncomeItem(account_code="4120.01", description="Uang Sekolah (US)", total=us_sim.total_us_revenue))
+        items.append(IncomeItem(
+            account_code="4120.01", description="Uang Sekolah (US)",
+            total=us_sim.total_us_revenue, auto_total=us_sim.auto_us_revenue,
+        ))
         total += us_sim.total_us_revenue
+        total_auto += us_sim.auto_us_revenue
 
         entries = crud_entry.list_by_org(db, org.id)
         agg = _aggregate_entries(entries)
@@ -394,8 +407,9 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
                     for ga in e.grade_allocations
                 )
                 amount = grade_total if grade_total else amount
-            items.append(IncomeItem(account_code=income_code, description=data["description"] or cat.label, total=amount))
+            items.append(IncomeItem(account_code=income_code, description=data["description"] or cat.label, total=amount, auto_total=amount))
             total += amount
+            total_auto += amount
 
         # SUM_FROM_BOS: jumlahkan kolom bos dari seluruh BudgetEntry
         from ..crud import income_category as crud_income_cat
@@ -407,8 +421,9 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
             total_bos = sum(e.bos or 0.0 for e in entries)
             if total_bos:
                 for bos_cat in bos_categories:
-                    items.append(IncomeItem(account_code=bos_cat.code, description=bos_cat.label, total=total_bos))
+                    items.append(IncomeItem(account_code=bos_cat.code, description=bos_cat.label, total=total_bos, auto_total=total_bos))
                     total += total_bos
+                    total_auto += total_bos
 
         income_entries = crud_income.list_by_org(db, org.id)
         income_agg = defaultdict(lambda: {"total": 0.0, "desc": "", "code": ""})
@@ -421,8 +436,9 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
                 income_agg[cid]["code"] = ie.income_category.code
         for cid, data in sorted(income_agg.items()):
             if data["total"]:
-                items.append(IncomeItem(account_code=data["code"], description=data["desc"] or data["code"], total=data["total"]))
+                items.append(IncomeItem(account_code=data["code"], description=data["desc"] or data["code"], total=data["total"], auto_total=data["total"]))
                 total += data["total"]
+                total_auto += data["total"]
 
     else:
         # Untuk CABANG/PUSAT: pendapatan berasal dari kontribusi UP dan US
@@ -437,17 +453,23 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
             if from_org is None or from_org.org_type != OrgType.UNIT:
                 continue
             unit_rates = crud_misc.get_rates(db, from_org.id)
-            up_revenue = simulate_up(db, from_org).total_up_revenue
-            us_revenue = simulate_us(db, from_org).total_us_revenue
-            contribution_up = up_revenue * unit_rates.get(up_rate_key, 0.0)
-            contribution_us = us_revenue * unit_rates.get(us_rate_key, 0.0)
+            up_sim = simulate_up(db, from_org)
+            us_sim = simulate_us(db, from_org)
+            up_rate = unit_rates.get(up_rate_key, 0.0)
+            us_rate = unit_rates.get(us_rate_key, 0.0)
+            contribution_up = up_sim.total_up_revenue * up_rate
+            contribution_us = us_sim.total_us_revenue * us_rate
+            contribution_up_auto = up_sim.auto_up_revenue * up_rate
+            contribution_us_auto = us_sim.auto_us_revenue * us_rate
             name = from_org.name
             if contribution_up:
-                items.append(IncomeItem(account_code="4630.01", description=f"Kontribusi UP dari {name}", total=contribution_up))
+                items.append(IncomeItem(account_code="4630.01", description=f"Kontribusi UP dari {name}", total=contribution_up, auto_total=contribution_up_auto))
                 total += contribution_up
+                total_auto += contribution_up_auto
             if contribution_us:
-                items.append(IncomeItem(account_code="4630.02", description=f"Kontribusi US dari {name}", total=contribution_us))
+                items.append(IncomeItem(account_code="4630.02", description=f"Kontribusi US dari {name}", total=contribution_us, auto_total=contribution_us_auto))
                 total += contribution_us
+                total_auto += contribution_us_auto
 
         income_entries = crud_income.list_by_org(db, org.id)
         income_agg = defaultdict(lambda: {"total": 0.0, "desc": "", "code": ""})
@@ -460,10 +482,11 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
                 income_agg[cid]["code"] = ie.income_category.code
         for cid, data in sorted(income_agg.items()):
             if data["total"]:
-                items.append(IncomeItem(account_code=data["code"], description=data["desc"] or data["code"], total=data["total"]))
+                items.append(IncomeItem(account_code=data["code"], description=data["desc"] or data["code"], total=data["total"], auto_total=data["total"]))
                 total += data["total"]
+                total_auto += data["total"]
 
-    return IncomeSimulation(items=items, total=total)
+    return IncomeSimulation(items=items, total=total, total_auto=total_auto)
 
 
 def simulate_expenses(db: Session, org: Organization) -> ExpenseSimulation:
@@ -625,11 +648,14 @@ def simulate_summary(db: Session, org: Organization) -> BudgetSummary:
     investments = crud_inv.list_by_org(db, org.id)
 
     total_cash_revenue = income.total
+    total_cash_revenue_auto = income.total_auto
     total_cash_expenses = expenses.total
     total_investments = sum(inv.purchase_price for inv in investments)
     cash_surplus_deficit = total_cash_revenue - total_cash_expenses - total_investments
+    cash_surplus_deficit_auto = total_cash_revenue_auto - total_cash_expenses - total_investments
     total_accrual_expenses = total_cash_expenses + depreciation.total_current_year_dep
     accrual_surplus_deficit = total_cash_revenue - total_accrual_expenses
+    accrual_surplus_deficit_auto = total_cash_revenue_auto - total_accrual_expenses
 
     return BudgetSummary(
         organization_id=org.id,
@@ -637,12 +663,16 @@ def simulate_summary(db: Session, org: Organization) -> BudgetSummary:
         org_type=org.org_type.value,
         budget_year=settings.budget_year,
         total_cash_revenue=total_cash_revenue,
+        total_cash_revenue_auto=total_cash_revenue_auto,
         total_cash_expenses=total_cash_expenses,
         total_investments=total_investments,
         cash_surplus_deficit=cash_surplus_deficit,
+        cash_surplus_deficit_auto=cash_surplus_deficit_auto,
         total_accrual_revenue=total_cash_revenue,
+        total_accrual_revenue_auto=total_cash_revenue_auto,
         total_accrual_expenses=total_accrual_expenses,
         accrual_surplus_deficit=accrual_surplus_deficit,
+        accrual_surplus_deficit_auto=accrual_surplus_deficit_auto,
         income=income,
         expenses=expenses,
         depreciation=depreciation,

@@ -32,7 +32,8 @@ class UPSimulation(BaseModel):
     new_student_count: int
     auto_up_rate: float
     final_up_rate: float           # override if provided
-    total_up_revenue: float
+    total_up_revenue: float        # final (override) revenue
+    auto_up_revenue: float         # revenue using auto rate (ignores override)
 
 
 # ── US Calculation ────────────────────────────────────────────────────────────
@@ -58,7 +59,8 @@ class USSimulation(BaseModel):
     months: int                    # always 12
     auto_us_rate: float
     final_us_rate: float
-    total_us_revenue: float
+    total_us_revenue: float        # final (override) revenue
+    auto_us_revenue: float         # revenue using auto rate (ignores override)
 
 
 # ── Income Detail ─────────────────────────────────────────────────────────────
@@ -66,12 +68,14 @@ class USSimulation(BaseModel):
 class IncomeItem(BaseModel):
     account_code: str
     description: str
-    total: float
+    total: float                   # final (override) amount
+    auto_total: float              # amount using auto-calculated UP/US (ignores override)
 
 
 class IncomeSimulation(BaseModel):
     items: list[IncomeItem]
-    total: float
+    total: float                   # final (override) total
+    total_auto: float              # total using auto-calculated UP/US (ignores override)
 
 
 # ── Expense Detail ────────────────────────────────────────────────────────────
@@ -141,15 +145,19 @@ class BudgetSummary(BaseModel):
     budget_year: str
 
     # Cash basis (budget entries + investments)
-    total_cash_revenue: float
+    total_cash_revenue: float       # final (override) revenue
+    total_cash_revenue_auto: float  # revenue using auto-calculated UP/US
     total_cash_expenses: float      # budget entries (5xxx)
     total_investments: float        # investment purchases (1330)
     cash_surplus_deficit: float     # revenue - cash_expenses - investments
+    cash_surplus_deficit_auto: float  # auto revenue - cash_expenses - investments
 
     # Accrual basis (replaces investment cost with depreciation)
     total_accrual_revenue: float
+    total_accrual_revenue_auto: float
     total_accrual_expenses: float   # cash_expenses + depreciation
     accrual_surplus_deficit: float  # revenue - accrual_expenses
+    accrual_surplus_deficit_auto: float  # auto revenue - accrual_expenses
 
     # Detail
     income: IncomeSimulation

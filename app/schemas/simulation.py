@@ -15,15 +15,19 @@ class UPComponentItem(BaseModel):
 
 class UPSimulation(BaseModel):
     components: list[UPComponentItem]
-    # Komponen biaya UP yang dialokasikan dari organisasi induk (Cabang/Pusat)
-    allocated_components: list[UPComponentItem]
+    # Komponen biaya UP yang dialokasikan dari induk, dipisahkan Cabang vs Pusat
+    cabang_allocated_components: list[UPComponentItem]
+    pusat_allocated_components: list[UPComponentItem]
     total_up_cost: float
-    # Total biaya UP yang dialokasikan dari organisasi induk (Cabang/Pusat)
-    parent_allocated_up_cost: float
+    # Total biaya UP yang dialokasikan dari Cabang dan dari Pusat (terpisah)
+    cabang_allocated_up_cost: float
+    pusat_allocated_up_cost: float
     new_investment_dep: float
     old_asset_dep: float
-    # Depresiasi aset lama Cabang/Pusat yang dialokasikan ke unit (menambah UP)
-    parent_allocated_old_asset_dep: float
+    # Depresiasi aset lama induk yang dialokasikan ke unit (menambah UP),
+    # dipisahkan antara Cabang dan Pusat
+    cabang_allocated_old_asset_dep: float
+    pusat_allocated_old_asset_dep: float
     total_up_cost_with_dep: float
     new_student_count: int
     auto_up_rate: float
@@ -43,11 +47,13 @@ class USComponentItem(BaseModel):
 
 class USSimulation(BaseModel):
     components: list[USComponentItem]
-    # Komponen biaya US yang dialokasikan dari organisasi induk (Cabang/Pusat)
-    allocated_components: list[USComponentItem]
+    # Komponen biaya US yang dialokasikan dari induk, dipisahkan Cabang vs Pusat
+    cabang_allocated_components: list[USComponentItem]
+    pusat_allocated_components: list[USComponentItem]
     total_us_cost: float
-    # Total biaya US yang dialokasikan dari organisasi induk (Cabang/Pusat)
-    parent_allocated_us_cost: float
+    # Total biaya US yang dialokasikan dari Cabang dan dari Pusat (terpisah)
+    cabang_allocated_us_cost: float
+    pusat_allocated_us_cost: float
     total_students: int
     months: int                    # always 12
     auto_us_rate: float

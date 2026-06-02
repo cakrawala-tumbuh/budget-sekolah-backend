@@ -349,7 +349,9 @@ class TestParentDepreciationAllocation:
         self._add_old_asset(client, cabang, 12_000_000.0)
 
         data = client.get(f"/organizations/{unit}/simulation/up").json()
-        assert data["parent_allocated_old_asset_dep"] == 3_000_000.0
+        # Depresiasi berasal dari Cabang; bucket Pusat nol
+        assert data["cabang_allocated_old_asset_dep"] == 3_000_000.0
+        assert data["pusat_allocated_old_asset_dep"] == 0.0
         # Komponen biaya UP unit murni 36 jt (tidak termasuk dep induk)
         assert data["total_up_cost"] == 36_000_000.0
         assert data["old_asset_dep"] == 0.0
@@ -373,7 +375,9 @@ class TestParentDepreciationAllocation:
         self._add_old_asset(client, pusat, 8_000_000.0)
 
         data = client.get(f"/organizations/{unit}/simulation/up").json()
-        assert data["parent_allocated_old_asset_dep"] == 5_000_000.0
+        # Alokasi depresiasi Cabang dan Pusat dipisahkan
+        assert data["cabang_allocated_old_asset_dep"] == 3_000_000.0
+        assert data["pusat_allocated_old_asset_dep"] == 2_000_000.0
         assert data["total_up_cost_with_dep"] == 41_000_000.0
 
     def test_dep_split_proportionally_between_units(self, client):
@@ -390,8 +394,8 @@ class TestParentDepreciationAllocation:
 
         data_a = client.get(f"/organizations/{unit_a}/simulation/up").json()
         data_b = client.get(f"/organizations/{unit_b}/simulation/up").json()
-        assert abs(data_a["parent_allocated_old_asset_dep"] - 1_800_000.0) < 1.0
-        assert abs(data_b["parent_allocated_old_asset_dep"] - 1_200_000.0) < 1.0
+        assert abs(data_a["cabang_allocated_old_asset_dep"] - 1_800_000.0) < 1.0
+        assert abs(data_b["cabang_allocated_old_asset_dep"] - 1_200_000.0) < 1.0
 
     def test_override_pct_up_respected(self, client):
         cabang = client.post("/organizations", json={
@@ -404,7 +408,7 @@ class TestParentDepreciationAllocation:
         self._add_old_asset(client, cabang, 12_000_000.0)
 
         data = client.get(f"/organizations/{unit}/simulation/up").json()
-        assert abs(data["parent_allocated_old_asset_dep"] - 750_000.0) < 1.0
+        assert abs(data["cabang_allocated_old_asset_dep"] - 750_000.0) < 1.0
 
     def test_override_up_rate_still_adds_parent_dep(self, client):
         """Override tarif UP hanya mengganti komponen biaya; dep induk tetap ditambah."""
@@ -422,7 +426,7 @@ class TestParentDepreciationAllocation:
         self._add_old_asset(client, cabang, 12_000_000.0)  # dep = 3_000_000
 
         data = client.get(f"/organizations/{unit}/simulation/up").json()
-        assert data["parent_allocated_old_asset_dep"] == 3_000_000.0
+        assert data["cabang_allocated_old_asset_dep"] == 3_000_000.0
         # final = override + dep_induk/siswa_baru
         assert abs(data["final_up_rate"] - (1_000_000.0 + 3_000_000.0 / 60)) < 1.0
 
@@ -435,10 +439,108 @@ class TestParentDepreciationAllocation:
         self._add_old_asset(client, cabang, 12_000_000.0)
 
         data = client.get(f"/organizations/{unit}/simulation/up").json()
-        assert data["parent_allocated_old_asset_dep"] == 0.0
+        assert data["cabang_allocated_old_asset_dep"] == 0.0
+        assert data["pusat_allocated_old_asset_dep"] == 0.0
 
     def test_no_parent_dep_for_standalone_unit(self, client):
         """Unit tanpa induk tidak memperoleh alokasi depresiasi induk."""
         unit = _setup_unit(client, "SD-DEP-G")
         data = client.get(f"/organizations/{unit}/simulation/up").json()
-        assert data["parent_allocated_old_asset_dep"] == 0.0
+        assert data["cabang_allocated_old_asset_dep"] == 0.0
+        assert data["pusat_allocated_old_asset_dep"] == 0.0
+
+
+class TestParentAllocationSeparation:
+    """
+    Alokasi biaya dari Cabang dipisahkan dari alokasi Pusat pada UP & US unit.
+
+    Hierarki: PUSAT <- CABANG <- UNIT, dengan ParentExpenseAllocation di
+    kedua induk. Unit terdaftar sebagai kontributor (sole) di Cabang dan Pusat.
+    """
+
+    def _setup(self, client, suffix: str):
+        pusat = client.post("/organizations", json={
+            "code": f"PST-SEP-{suffix}", "name": f"Pusat {suffix}", "org_type": "PUSAT",
+        }).json()["id"]
+        cabang = client.post("/organizations", json={
+            "code": f"CBG-SEP-{suffix}", "name": f"Cabang {suffix}",
+            "org_type": "CABANG", "parent_id": pusat,
+        }).json()["id"]
+        unit = client.post("/organizations", json={
+            "code": f"SD-SEP-{suffix}", "name": f"SD {suffix}",
+            "org_type": "UNIT", "parent_id": cabang,
+        }).json()["id"]
+        client.put(f"/organizations/{unit}/assumption", json={
+            "grade_1": 60, "grade_2": 140, "grade_3": 0, "grade_4": 0,
+            "grade_5": 0, "grade_6": 0,
+            "new_student_count": 60, "returning_student_count": 140, "staff_count": 5,
+        })
+
+        cat_dev = _expense_cat_id(client, "5130.01")   # UP component
+        cat_gaji = _expense_cat_id(client, "5110.01")  # US component
+
+        # Biaya di Cabang: dev 24jt (UP), gaji 120jt (US)
+        client.post(f"/organizations/{cabang}/budget-entries", json={
+            "expense_category_id": cat_dev, "line_number": 1,
+            "description": "Dev Cabang", "foundation": 24_000_000.0, "bos": 0.0,
+        })
+        client.post(f"/organizations/{cabang}/budget-entries", json={
+            "expense_category_id": cat_gaji, "line_number": 1,
+            "description": "Gaji Cabang", "foundation": 120_000_000.0, "bos": 0.0,
+        })
+        # Biaya di Pusat: dev 30jt (UP), gaji 90jt (US)
+        client.post(f"/organizations/{pusat}/budget-entries", json={
+            "expense_category_id": cat_dev, "line_number": 1,
+            "description": "Dev Pusat", "foundation": 30_000_000.0, "bos": 0.0,
+        })
+        client.post(f"/organizations/{pusat}/budget-entries", json={
+            "expense_category_id": cat_gaji, "line_number": 1,
+            "description": "Gaji Pusat", "foundation": 90_000_000.0, "bos": 0.0,
+        })
+
+        # ParentExpenseAllocation di Cabang dan Pusat
+        for parent in (cabang, pusat):
+            client.post(f"/organizations/{parent}/parent-expense-allocations",
+                        json={"expense_category_id": cat_dev, "affects_up": True})
+            client.post(f"/organizations/{parent}/parent-expense-allocations",
+                        json={"expense_category_id": cat_gaji, "affects_up": False})
+
+        # Unit kontributor tunggal di Cabang dan Pusat -> pct = 1.0
+        for parent in (cabang, pusat):
+            client.put(f"/organizations/{parent}/contribution-allocations", json={
+                "from_organization_id": unit, "total_students": 200, "new_students": 60,
+            })
+        return pusat, cabang, unit
+
+    def test_up_separates_cabang_and_pusat(self, client):
+        _, _, unit = self._setup(client, "UP")
+        data = client.get(f"/organizations/{unit}/simulation/up").json()
+
+        assert abs(data["cabang_allocated_up_cost"] - 24_000_000.0) < 1.0
+        assert abs(data["pusat_allocated_up_cost"] - 30_000_000.0) < 1.0
+        # total = own (0) + cabang + pusat
+        assert abs(data["total_up_cost"] - 54_000_000.0) < 1.0
+
+        cabang_items = data["cabang_allocated_components"]
+        pusat_items = data["pusat_allocated_components"]
+        assert len(cabang_items) == 1 and len(pusat_items) == 1
+        assert cabang_items[0]["description"].startswith("[Alokasi Cabang]")
+        assert pusat_items[0]["description"].startswith("[Alokasi Pusat]")
+        assert abs(cabang_items[0]["total"] - 24_000_000.0) < 1.0
+        assert abs(pusat_items[0]["total"] - 30_000_000.0) < 1.0
+
+    def test_us_separates_cabang_and_pusat(self, client):
+        _, _, unit = self._setup(client, "US")
+        data = client.get(f"/organizations/{unit}/simulation/us").json()
+
+        assert abs(data["cabang_allocated_us_cost"] - 120_000_000.0) < 1.0
+        assert abs(data["pusat_allocated_us_cost"] - 90_000_000.0) < 1.0
+        assert abs(data["total_us_cost"] - 210_000_000.0) < 1.0
+
+        cabang_items = data["cabang_allocated_components"]
+        pusat_items = data["pusat_allocated_components"]
+        assert len(cabang_items) == 1 and len(pusat_items) == 1
+        assert cabang_items[0]["description"].startswith("[Alokasi Cabang]")
+        assert pusat_items[0]["description"].startswith("[Alokasi Pusat]")
+        assert abs(cabang_items[0]["total"] - 120_000_000.0) < 1.0
+        assert abs(pusat_items[0]["total"] - 90_000_000.0) < 1.0

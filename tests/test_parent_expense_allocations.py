@@ -157,7 +157,8 @@ class TestParentExpenseAllocationSimulation:
         resp = client.get(f"/organizations/{unit_a}/simulation/up")
         assert resp.status_code == status.HTTP_200_OK
         data = resp.json()
-        assert data["parent_allocated_up_cost"] == 0.0
+        assert data["cabang_allocated_up_cost"] == 0.0
+        assert data["pusat_allocated_up_cost"] == 0.0
         # Tidak ada biaya UP di unit itu sendiri
         assert data["total_up_cost"] == 0.0
 
@@ -174,13 +175,15 @@ class TestParentExpenseAllocationSimulation:
         resp = client.get(f"/organizations/{unit_a}/simulation/up")
         data = resp.json()
         assert resp.status_code == status.HTTP_200_OK
-        assert abs(data["parent_allocated_up_cost"] - 14_400_000.0) < 1.0
+        assert abs(data["cabang_allocated_up_cost"] - 14_400_000.0) < 1.0
+        assert data["pusat_allocated_up_cost"] == 0.0
         assert abs(data["total_up_cost"] - 14_400_000.0) < 1.0
 
-        # Pastikan komponen [Alokasi Induk] ada di allocated_components
-        alloc_items = [c for c in data["allocated_components"] if c["account_code"].startswith("ALLOC:")]
+        # Pastikan komponen [Alokasi Cabang] ada di cabang_allocated_components
+        alloc_items = [c for c in data["cabang_allocated_components"] if c["account_code"].startswith("ALLOC:")]
         assert len(alloc_items) == 1
         assert abs(alloc_items[0]["total"] - 14_400_000.0) < 1.0
+        assert alloc_items[0]["description"].startswith("[Alokasi Cabang]")
 
     def test_up_with_parent_allocation_unit_b(self, client):
         """
@@ -193,7 +196,7 @@ class TestParentExpenseAllocationSimulation:
 
         resp = client.get(f"/organizations/{unit_b}/simulation/up")
         data = resp.json()
-        assert abs(data["parent_allocated_up_cost"] - 9_600_000.0) < 1.0
+        assert abs(data["cabang_allocated_up_cost"] - 9_600_000.0) < 1.0
 
     def test_us_with_parent_allocation(self, client):
         """
@@ -209,10 +212,11 @@ class TestParentExpenseAllocationSimulation:
         data = resp.json()
         assert resp.status_code == status.HTTP_200_OK
         expected_us = (200 / 300) * 120_000_000.0
-        assert abs(data["parent_allocated_us_cost"] - expected_us) < 1.0
+        assert abs(data["cabang_allocated_us_cost"] - expected_us) < 1.0
+        assert data["pusat_allocated_us_cost"] == 0.0
         assert abs(data["total_us_cost"] - expected_us) < 1.0
 
-        alloc_items = [c for c in data["allocated_components"] if c["account_code"].startswith("ALLOC:")]
+        alloc_items = [c for c in data["cabang_allocated_components"] if c["account_code"].startswith("ALLOC:")]
         assert len(alloc_items) == 1
 
     def test_inactive_allocation_not_included(self, client):
@@ -225,7 +229,8 @@ class TestParentExpenseAllocationSimulation:
 
         resp = client.get(f"/organizations/{unit_a}/simulation/us")
         data = resp.json()
-        assert data["parent_allocated_us_cost"] == 0.0
+        assert data["cabang_allocated_us_cost"] == 0.0
+        assert data["pusat_allocated_us_cost"] == 0.0
 
     def test_unit_without_contribution_alloc_gets_zero(self, client):
         """Unit yang tidak terdaftar di ContributionAllocation tidak mendapat alokasi."""
@@ -245,7 +250,8 @@ class TestParentExpenseAllocationSimulation:
 
         resp = client.get(f"/organizations/{unit_no_alloc}/simulation/us")
         data = resp.json()
-        assert data["parent_allocated_us_cost"] == 0.0
+        assert data["cabang_allocated_us_cost"] == 0.0
+        assert data["pusat_allocated_us_cost"] == 0.0
 
 
 class TestSimulateAllocationFixed:

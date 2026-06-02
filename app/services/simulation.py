@@ -2,6 +2,7 @@
 Simulation service — UP, US, income, expenses, and RAB summary calculations.
 """
 from collections import defaultdict
+from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
@@ -29,58 +30,68 @@ def _fiscal_year(budget_year: str) -> int:
         return 2025
 
 
-def _get_parent_allocated_components(
+@dataclass
+class _ParentAllocation:
+    """
+    Komponen biaya UP/US yang dialokasikan dari organisasi induk ke unit,
+    dipisahkan berdasarkan jenis induk: Cabang vs Pusat.
+    """
+    up_cabang: list[UPComponentItem] = field(default_factory=list)
+    up_pusat: list[UPComponentItem] = field(default_factory=list)
+    us_cabang: list[USComponentItem] = field(default_factory=list)
+    us_pusat: list[USComponentItem] = field(default_factory=list)
+    total_up_cabang: float = 0.0
+    total_up_pusat: float = 0.0
+    total_us_cabang: float = 0.0
+    total_us_pusat: float = 0.0
+
+
+def _ancestor_up_pct(this_alloc, total_new_all: int) -> float:
+    """Proporsi UP unit di suatu ancestor (override_pct_up bila ada)."""
+    if this_alloc.override_pct_up is not None:
+        return this_alloc.override_pct_up
+    return this_alloc.new_students / total_new_all
+
+
+def _allocated_components_from_ancestor(
     db: Session,
     org: Organization,
+    ancestor: Organization,
 ) -> tuple[list[UPComponentItem], list[USComponentItem], float, float]:
     """
-    Hitung komponen UP dan US yang dialokasikan dari organisasi induk ke org ini.
+    Hitung komponen UP dan US yang dialokasikan dari satu ancestor (Cabang
+    atau Pusat) ke org ini, secara proporsional berdasarkan ContributionAllocation.
 
-    Distribusi proporsional berdasarkan ContributionAllocation:
-    - UP: menggunakan new_students / total new_students semua anak
-    - US: menggunakan total_students / total students semua anak
-    Override proporsi menggunakan override_pct_up / override_pct_us di ContributionAllocation.
-
-    Args:
-        db: Database session.
-        org: Organisasi anak (UNIT atau CABANG) yang menerima alokasi.
+    - UP: new_students / total new_students kontributor (override_pct_up).
+    - US: total_students / total students kontributor (override_pct_us).
 
     Returns:
         Tuple (up_components, us_components, total_up_allocated, total_us_allocated).
     """
-    if org.parent_id is None:
-        return [], [], 0.0, 0.0
-
-    # Ambil konfigurasi alokasi aktif dari parent
-    parent_pea = crud_pea.list_active_by_org(db, org.parent_id)
+    parent_pea = crud_pea.list_active_by_org(db, ancestor.id)
     if not parent_pea:
         return [], [], 0.0, 0.0
 
-    # Ambil ContributionAllocation dari semua anak ke parent (untuk proporsi)
-    sibling_allocs = crud_misc.list_allocations(db, org.parent_id)
+    sibling_allocs = crud_misc.list_allocations(db, ancestor.id)
     total_students_all = sum(a.total_students for a in sibling_allocs) or 1
     total_new_all = sum(a.new_students for a in sibling_allocs) or 1
 
-    # Cari alokasi milik org ini
     this_alloc = next(
         (a for a in sibling_allocs if a.from_organization_id == org.id),
         None,
     )
     if this_alloc is None:
-        # Org ini tidak terdaftar di ContributionAllocation parent — tidak ada alokasi
+        # Org ini tidak terdaftar di ContributionAllocation ancestor — tidak ada alokasi
         return [], [], 0.0, 0.0
 
-    # Hitung proporsi untuk UP dan US
-    pct_up = (
-        this_alloc.override_pct_up
-        if this_alloc.override_pct_up is not None
-        else (this_alloc.new_students / total_new_all)
-    )
+    pct_up = _ancestor_up_pct(this_alloc, total_new_all)
     pct_us = (
         this_alloc.override_pct_us
         if this_alloc.override_pct_us is not None
         else (this_alloc.total_students / total_students_all)
     )
+
+    label_prefix = "[Alokasi Pusat]" if ancestor.org_type == OrgType.PUSAT else "[Alokasi Cabang]"
 
     up_components: list[UPComponentItem] = []
     us_components: list[USComponentItem] = []
@@ -88,9 +99,8 @@ def _get_parent_allocated_components(
     total_us = 0.0
 
     for pea in parent_pea:
-        # Total biaya kategori ini di parent
         parent_entries = crud_entry.list_by_category(
-            db, org.parent_id, pea.expense_category_id
+            db, ancestor.id, pea.expense_category_id
         )
         parent_total = sum(
             (e.foundation or 0.0) + (e.bos or 0.0) for e in parent_entries
@@ -107,7 +117,7 @@ def _get_parent_allocated_components(
             total_up += allocated
             up_components.append(UPComponentItem(
                 account_code=f"ALLOC:{cat_code}",
-                description=f"[Alokasi Induk] {cat_label}",
+                description=f"{label_prefix} {cat_label}",
                 total_yayasan=allocated,
                 total_bos=0.0,
                 total=allocated,
@@ -117,7 +127,7 @@ def _get_parent_allocated_components(
             total_us += allocated
             us_components.append(USComponentItem(
                 account_code=f"ALLOC:{cat_code}",
-                description=f"[Alokasi Induk] {cat_label}",
+                description=f"{label_prefix} {cat_label}",
                 total_yayasan=allocated,
                 total_bos=0.0,
                 total=allocated,
@@ -126,32 +136,64 @@ def _get_parent_allocated_components(
     return up_components, us_components, total_up, total_us
 
 
-def _get_parent_allocated_old_asset_dep(db: Session, org: Organization) -> float:
+def _get_parent_allocated_components(db: Session, org: Organization) -> _ParentAllocation:
     """
-    Hitung porsi depresiasi aset lama tahun berjalan dari organisasi induk
-    (Cabang dan Pusat) yang dialokasikan ke unit ini, menambah beban UP.
+    Hitung komponen UP/US yang dialokasikan dari seluruh induk (Cabang lalu
+    Pusat) ke org ini, dipisahkan per jenis induk.
 
-    Depresiasi aset lama tahun ini di setiap ancestor (Cabang lalu Pusat)
-    didistribusikan ke unit secara proporsional berdasarkan new_students —
-    proporsi UP yang sama dengan alokasi biaya induk. Override per-unit
-    menggunakan override_pct_up di ContributionAllocation ancestor.
+    Menelusuri rantai induk (parent → ... → root); kontribusi tiap ancestor
+    dimasukkan ke bucket Cabang atau Pusat sesuai org_type-nya.
 
     Args:
         db: Database session.
         org: Organisasi anak (UNIT) penerima alokasi.
 
     Returns:
-        Total depresiasi aset lama induk (Cabang + Pusat) yang dialokasikan
-        ke unit ini.
+        _ParentAllocation dengan komponen & total UP/US terpisah Cabang vs Pusat.
+    """
+    result = _ParentAllocation()
+    ancestor = org.parent
+    while ancestor is not None:
+        up_c, us_c, total_up, total_us = _allocated_components_from_ancestor(db, org, ancestor)
+        if ancestor.org_type == OrgType.PUSAT:
+            result.up_pusat.extend(up_c)
+            result.us_pusat.extend(us_c)
+            result.total_up_pusat += total_up
+            result.total_us_pusat += total_us
+        else:  # CABANG (atau induk lain selain Pusat)
+            result.up_cabang.extend(up_c)
+            result.us_cabang.extend(us_c)
+            result.total_up_cabang += total_up
+            result.total_us_cabang += total_us
+        ancestor = ancestor.parent
+    return result
+
+
+def _get_parent_allocated_old_asset_dep(db: Session, org: Organization) -> tuple[float, float]:
+    """
+    Hitung porsi depresiasi aset lama tahun berjalan dari organisasi induk
+    yang dialokasikan ke unit ini, dipisahkan antara Cabang dan Pusat.
+
+    Depresiasi aset lama tahun ini di tiap ancestor didistribusikan ke unit
+    proporsional berdasarkan new_students (proporsi UP, override_pct_up bila
+    ada), lalu menambah beban UP unit.
+
+    Args:
+        db: Database session.
+        org: Organisasi anak (UNIT) penerima alokasi.
+
+    Returns:
+        Tuple (cabang_dep, pusat_dep) — depresiasi aset lama induk yang
+        dialokasikan ke unit ini dari Cabang dan dari Pusat.
     """
     fiscal_year = _fiscal_year(settings.budget_year)
-    total = 0.0
+    cabang_dep = 0.0
+    pusat_dep = 0.0
     ancestor = org.parent
     while ancestor is not None:
         old_assets = crud_misc.list_dep_by_org(db, ancestor.id)
         ancestor_dep = sum(a.dep_current_year(fiscal_year) for a in old_assets)
         if ancestor_dep:
-            # Proporsi UP unit ini terhadap seluruh kontributor di ancestor
             sibling_allocs = crud_misc.list_allocations(db, ancestor.id)
             total_new_all = sum(a.new_students for a in sibling_allocs) or 1
             this_alloc = next(
@@ -159,14 +201,13 @@ def _get_parent_allocated_old_asset_dep(db: Session, org: Organization) -> float
                 None,
             )
             if this_alloc is not None:
-                pct_up = (
-                    this_alloc.override_pct_up
-                    if this_alloc.override_pct_up is not None
-                    else (this_alloc.new_students / total_new_all)
-                )
-                total += pct_up * ancestor_dep
+                allocated = _ancestor_up_pct(this_alloc, total_new_all) * ancestor_dep
+                if ancestor.org_type == OrgType.PUSAT:
+                    pusat_dep += allocated
+                else:
+                    cabang_dep += allocated
         ancestor = ancestor.parent
-    return total
+    return cabang_dep, pusat_dep
 
 
 def _aggregate_entries(entries) -> dict:
@@ -204,18 +245,25 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
             ))
             total_own_up_cost += total
 
-    # Komponen UP yang dialokasikan dari organisasi induk (ditampilkan terpisah)
-    allocated_up_components, _, parent_allocated_up_cost, _ = _get_parent_allocated_components(db, org)
-    total_up_cost = total_own_up_cost + parent_allocated_up_cost
+    # Komponen UP yang dialokasikan dari induk, dipisahkan Cabang vs Pusat
+    parent_alloc = _get_parent_allocated_components(db, org)
+    cabang_allocated_up_cost = parent_alloc.total_up_cabang
+    pusat_allocated_up_cost = parent_alloc.total_up_pusat
+    total_up_cost = total_own_up_cost + cabang_allocated_up_cost + pusat_allocated_up_cost
 
     new_investment_dep = sum(i.dep_current_year for i in investments)
     fiscal_year = _fiscal_year(settings.budget_year)
     old_assets = crud_misc.list_dep_by_org(db, org.id)
     old_asset_dep = sum(old.dep_current_year(fiscal_year) for old in old_assets)
     # Depresiasi aset lama tahun ini di Cabang/Pusat dialokasikan ke unit,
-    # menambah beban (alokasi) UP unit.
-    parent_allocated_old_asset_dep = _get_parent_allocated_old_asset_dep(db, org)
-    total_dep = new_investment_dep + old_asset_dep + parent_allocated_old_asset_dep
+    # menambah beban (alokasi) UP unit — dipisahkan per jenis induk.
+    cabang_allocated_old_asset_dep, pusat_allocated_old_asset_dep = (
+        _get_parent_allocated_old_asset_dep(db, org)
+    )
+    total_dep = (
+        new_investment_dep + old_asset_dep
+        + cabang_allocated_old_asset_dep + pusat_allocated_old_asset_dep
+    )
     total_up_cost_with_dep = total_up_cost + total_dep
     new_student_count = (assumption.new_student_count if assumption else 0) or 1
     dep_per_student = total_dep / new_student_count
@@ -231,12 +279,15 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
 
     return UPSimulation(
         components=components,
-        allocated_components=allocated_up_components,
+        cabang_allocated_components=parent_alloc.up_cabang,
+        pusat_allocated_components=parent_alloc.up_pusat,
         total_up_cost=total_up_cost,
-        parent_allocated_up_cost=parent_allocated_up_cost,
+        cabang_allocated_up_cost=cabang_allocated_up_cost,
+        pusat_allocated_up_cost=pusat_allocated_up_cost,
         new_investment_dep=new_investment_dep,
         old_asset_dep=old_asset_dep,
-        parent_allocated_old_asset_dep=parent_allocated_old_asset_dep,
+        cabang_allocated_old_asset_dep=cabang_allocated_old_asset_dep,
+        pusat_allocated_old_asset_dep=pusat_allocated_old_asset_dep,
         total_up_cost_with_dep=total_up_cost_with_dep,
         new_student_count=new_student_count,
         auto_up_rate=auto_up_rate,
@@ -268,9 +319,11 @@ def simulate_us(db: Session, org: Organization) -> USSimulation:
             ))
             total_own_us_cost += total
 
-    # Komponen US yang dialokasikan dari organisasi induk (ditampilkan terpisah)
-    _, allocated_us_components, _, parent_allocated_us_cost = _get_parent_allocated_components(db, org)
-    total_us_cost = total_own_us_cost + parent_allocated_us_cost
+    # Komponen US yang dialokasikan dari induk, dipisahkan Cabang vs Pusat
+    parent_alloc = _get_parent_allocated_components(db, org)
+    cabang_allocated_us_cost = parent_alloc.total_us_cabang
+    pusat_allocated_us_cost = parent_alloc.total_us_pusat
+    total_us_cost = total_own_us_cost + cabang_allocated_us_cost + pusat_allocated_us_cost
 
     total_students = (assumption.total_students if assumption else 0) or 1
     months = 12
@@ -281,9 +334,11 @@ def simulate_us(db: Session, org: Organization) -> USSimulation:
 
     return USSimulation(
         components=components,
-        allocated_components=allocated_us_components,
+        cabang_allocated_components=parent_alloc.us_cabang,
+        pusat_allocated_components=parent_alloc.us_pusat,
         total_us_cost=total_us_cost,
-        parent_allocated_us_cost=parent_allocated_us_cost,
+        cabang_allocated_us_cost=cabang_allocated_us_cost,
+        pusat_allocated_us_cost=pusat_allocated_us_cost,
         total_students=total_students,
         months=months,
         auto_us_rate=auto_us_rate,

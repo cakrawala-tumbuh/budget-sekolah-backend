@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum as PyEnum
 
-from sqlalchemy import String, DateTime, ForeignKey, Enum
+from sqlalchemy import String, DateTime, ForeignKey, Enum, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
@@ -25,6 +25,9 @@ class Organization(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     org_type: Mapped[OrgType] = mapped_column(Enum(OrgType), nullable=False)
     city: Mapped[str | None] = mapped_column(String(100))
+    # Saldo kas & setara kas awal (opening balance). Dipakai sebagai dasar
+    # perhitungan budget kas (saldo kas akhir = saldo awal + surplus/defisit kas).
+    cash_balance: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     # UNIT → parent is CABANG; CABANG → parent is PUSAT
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

@@ -152,6 +152,11 @@ class BudgetSummary(BaseModel):
     cash_surplus_deficit: float     # revenue - cash_expenses - investments
     cash_surplus_deficit_auto: float  # auto revenue - cash_expenses - investments
 
+    # Cash & cash equivalents position
+    opening_cash_balance: float     # saldo kas & setara kas awal (org.cash_balance)
+    ending_cash_balance: float      # opening + cash_surplus_deficit (budget kas)
+    ending_cash_balance_auto: float  # opening + cash_surplus_deficit_auto
+
     # Accrual basis (replaces investment cost with depreciation)
     total_accrual_revenue: float
     total_accrual_revenue_auto: float

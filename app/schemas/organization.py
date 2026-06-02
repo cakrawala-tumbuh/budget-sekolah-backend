@@ -17,6 +17,8 @@ class OrganizationBase(BaseModel):
     name: str
     org_type: OrgType
     city: str | None = None
+    # Saldo kas & setara kas awal organisasi (total saja, tanpa rincian)
+    cash_balance: float = 0.0
     parent_id: int | None = None
 
     @field_validator("code")
@@ -34,6 +36,7 @@ class OrganizationCreate(OrganizationBase):
 class OrganizationUpdate(BaseModel):
     name: str | None = None
     city: str | None = None
+    cash_balance: float | None = None
     parent_id: int | None = None
 
 

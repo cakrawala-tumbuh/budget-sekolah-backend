@@ -215,6 +215,26 @@ class TestBudgetSummary:
         expected_accrual = data["total_cash_expenses"] + data["depreciation"]["total_current_year_dep"]
         assert abs(data["total_accrual_expenses"] - expected_accrual) < 0.01
 
+    def test_ending_cash_balance_uses_opening_saldo(self, client):
+        org_id = _setup_unit(client, "SD-SIM-SALDO")
+        # Set saldo kas & setara kas awal lewat update organisasi
+        client.put(f"/organizations/{org_id}", json={"cash_balance": 50_000_000.0})
+        resp = client.get(f"/organizations/{org_id}/simulation/summary")
+        data = resp.json()
+        assert abs(data["opening_cash_balance"] - 50_000_000.0) < 0.01
+        # saldo kas akhir = saldo awal + surplus/defisit kas
+        expected_ending = data["opening_cash_balance"] + data["cash_surplus_deficit"]
+        assert abs(data["ending_cash_balance"] - expected_ending) < 0.01
+        expected_ending_auto = data["opening_cash_balance"] + data["cash_surplus_deficit_auto"]
+        assert abs(data["ending_cash_balance_auto"] - expected_ending_auto) < 0.01
+
+    def test_default_cash_balance_is_zero(self, client):
+        org_id = _setup_unit(client, "SD-SIM-SALDO0")
+        resp = client.get(f"/organizations/{org_id}/simulation/summary")
+        data = resp.json()
+        assert data["opening_cash_balance"] == 0.0
+        assert abs(data["ending_cash_balance"] - data["cash_surplus_deficit"]) < 0.01
+
 
 class TestCabangIncomeSimulation:
     """Pendapatan CABANG berasal dari kontribusi UP/US setiap child UNIT."""

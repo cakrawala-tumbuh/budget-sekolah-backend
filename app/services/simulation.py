@@ -704,6 +704,10 @@ def simulate_summary(db: Session, org: Organization) -> BudgetSummary:
     total_investments = sum(inv.purchase_price for inv in investments)
     cash_surplus_deficit = total_cash_revenue - total_cash_expenses - total_investments
     cash_surplus_deficit_auto = total_cash_revenue_auto - total_cash_expenses - total_investments
+    # Saldo kas & setara kas: awal (dari master organisasi) + surplus/defisit kas
+    opening_cash_balance = org.cash_balance or 0.0
+    ending_cash_balance = opening_cash_balance + cash_surplus_deficit
+    ending_cash_balance_auto = opening_cash_balance + cash_surplus_deficit_auto
     total_accrual_expenses = total_cash_expenses + depreciation.total_current_year_dep
     accrual_surplus_deficit = total_cash_revenue - total_accrual_expenses
     accrual_surplus_deficit_auto = total_cash_revenue_auto - total_accrual_expenses
@@ -719,6 +723,9 @@ def simulate_summary(db: Session, org: Organization) -> BudgetSummary:
         total_investments=total_investments,
         cash_surplus_deficit=cash_surplus_deficit,
         cash_surplus_deficit_auto=cash_surplus_deficit_auto,
+        opening_cash_balance=opening_cash_balance,
+        ending_cash_balance=ending_cash_balance,
+        ending_cash_balance_auto=ending_cash_balance_auto,
         total_accrual_revenue=total_cash_revenue,
         total_accrual_revenue_auto=total_cash_revenue_auto,
         total_accrual_expenses=total_accrual_expenses,

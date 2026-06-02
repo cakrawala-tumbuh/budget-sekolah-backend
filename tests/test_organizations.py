@@ -90,6 +90,27 @@ class TestUpdateOrganization:
         assert resp.json()["name"] == "SD Updated"
 
 
+class TestCashBalance:
+    def test_default_cash_balance_zero(self, client):
+        resp = _create_unit(client, code="SD-CASH-DEF")
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert resp.json()["cash_balance"] == 0.0
+
+    def test_create_with_cash_balance(self, client):
+        resp = client.post("/organizations", json={
+            "code": "SD-CASH-NEW", "name": "SD Cash", "org_type": "UNIT",
+            "cash_balance": 25_000_000.0,
+        })
+        assert resp.status_code == status.HTTP_201_CREATED
+        assert resp.json()["cash_balance"] == 25_000_000.0
+
+    def test_update_cash_balance(self, client):
+        org = _create_unit(client, code="SD-CASH-UPD").json()
+        resp = client.put(f"/organizations/{org['id']}", json={"cash_balance": 7_500_000.0})
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["cash_balance"] == 7_500_000.0
+
+
 class TestHierarchicalAccess:
     """Organisasi yang lebih tinggi bisa melihat semua naungannya, berjenjang."""
 

@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect, text
 
 from .config import settings
 from .database import Base, engine, SessionLocal
@@ -40,10 +41,30 @@ from .crud.income_category import get_code_to_id_map
 from .crud.user import create_or_update_admin
 
 
+def _run_lightweight_migrations() -> None:
+    """
+    Migrasi ringan untuk database lama: ``create_all`` bersifat idempotent untuk
+    tabel baru, tetapi tidak menambah kolom pada tabel yang sudah ada. Tambahkan
+    kolom baru via ALTER TABLE bila belum ada agar DB lama tetap kompatibel.
+    """
+    inspector = inspect(engine)
+    if "organizations" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("organizations")}
+    if "cash_balance" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE organizations "
+                "ADD COLUMN cash_balance FLOAT NOT NULL DEFAULT 0.0"
+            ))
+        print("[startup] Migrated: added organizations.cash_balance")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create all tables at startup (idempotent)
     Base.metadata.create_all(bind=engine)
+    _run_lightweight_migrations()
     db = SessionLocal()
     try:
         # Semai kategori pendapatan terlebih dahulu (diperlukan FK dari ExpenseCategory)

@@ -27,3 +27,8 @@ class ParentExpenseAllocationRead(ParentExpenseAllocationBase):
     expense_category_label: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class CopyResult(BaseModel):
+    copied: int
+    skipped: int

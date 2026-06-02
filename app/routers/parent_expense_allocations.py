@@ -10,7 +10,7 @@ Endpoint:
 
 Hanya organisasi bertipe CABANG atau PUSAT yang dapat memiliki konfigurasi ini.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from ..crud import organization as org_crud
 from ..crud import parent_expense_allocation as crud
 from ..models.organization import OrgType
 from ..schemas.parent_expense_allocation import (
+    CopyResult,
     ParentExpenseAllocationCreate,
     ParentExpenseAllocationRead,
     ParentExpenseAllocationUpdate,
@@ -130,3 +131,26 @@ def delete_allocation(
     if alloc is None or alloc.parent_org_id != org_id:
         raise HTTPException(status_code=404, detail="Allocation not found")
     crud.delete(db, alloc)
+
+
+@router.post(
+    "/organizations/{org_id}/parent-expense-allocations/copy-from/{source_org_id}",
+    response_model=CopyResult,
+    summary="Salin konfigurasi alokasi biaya dari organisasi lain",
+)
+def copy_allocations_from(
+    org_id: int,
+    source_org_id: int,
+    affects_up: bool | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Salin konfigurasi kategori biaya dari organisasi lain ke organisasi ini.
+    Kategori yang sudah ada di tujuan akan dilewati (tidak digandakan).
+    Gunakan query param affects_up=true/false untuk filter hanya UP atau US.
+    """
+    _get_parent_org_or_404(db, org_id)
+    _get_parent_org_or_404(db, source_org_id)
+    if org_id == source_org_id:
+        raise HTTPException(status_code=400, detail="Source and target organization must be different")
+    return crud.copy_from(db, org_id, source_org_id, affects_up)

@@ -39,9 +39,20 @@ def list_organizations(
     skip: int = 0,
     limit: int = 200,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    return crud.get_all(db, skip=skip, limit=limit)
+    """
+    Daftar organisasi.
+
+    ADMIN melihat semua organisasi. User ORG hanya melihat organisasinya
+    sendiri beserta seluruh organisasi yang dinaunginya secara berjenjang.
+    """
+    if current_user.role == UserRole.ADMIN:
+        return crud.get_all(db, skip=skip, limit=limit)
+    if current_user.org_id is None:
+        return []
+    subtree = crud.get_subtree(db, current_user.org_id)
+    return subtree[skip : skip + limit]
 
 
 @router.post("", response_model=OrganizationCreated, status_code=status.HTTP_201_CREATED)
@@ -81,9 +92,24 @@ def create_organization(
 def get_organization(
     org_id: int,
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    return _get_or_404(db, org_id)
+    """
+    Detail organisasi beserta daftar anak langsungnya.
+
+    User ORG hanya boleh mengakses organisasinya sendiri atau organisasi yang
+    dinaunginya secara berjenjang; selain itu dikembalikan 403.
+    """
+    obj = _get_or_404(db, org_id)
+    if current_user.role != UserRole.ADMIN:
+        if current_user.org_id is None or org_id not in crud.get_descendant_ids(
+            db, current_user.org_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tidak punya akses ke organisasi ini",
+            )
+    return obj
 
 
 @router.put("/{org_id}", response_model=OrganizationRead)

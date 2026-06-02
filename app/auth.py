@@ -134,24 +134,35 @@ def require_admin(
 def get_org_access(
     org_id: int,
     current_user: Annotated[User, Depends(get_current_user)],
+    db: Session = Depends(get_db),
 ) -> User:
     """
-    FastAPI dependency — izinkan admin atau pemilik org_id yang sesuai.
+    FastAPI dependency — izinkan admin atau organisasi yang menaungi org_id.
+
+    Akses berlaku secara berjenjang: organisasi yang lebih tinggi boleh
+    mengakses semua organisasi yang dinaunginya sampai ke bawah. Contohnya
+    PUSAT dapat mengakses seluruh CABANG dan UNIT di bawahnya, dan CABANG
+    dapat mengakses seluruh UNIT di bawahnya.
 
     Mengambil org_id dari path parameter secara otomatis oleh FastAPI.
 
     Args:
         org_id: ID organisasi dari path parameter.
         current_user: User yang sedang login.
+        db: Session database.
 
     Raises:
-        HTTPException 403: User ORG mencoba mengakses org yang bukan miliknya.
+        HTTPException 403: User ORG mencoba mengakses org di luar naungannya.
     """
     if current_user.role == UserRole.ADMIN:
         return current_user
-    if current_user.org_id != org_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tidak punya akses ke organisasi ini",
-        )
-    return current_user
+    if current_user.org_id is not None:
+        # Lazy import to avoid circular dependency at module load time.
+        from .crud import organization as org_crud
+        allowed_ids = org_crud.get_descendant_ids(db, current_user.org_id)
+        if org_id in allowed_ids:
+            return current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Tidak punya akses ke organisasi ini",
+    )

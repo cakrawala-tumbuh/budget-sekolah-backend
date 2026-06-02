@@ -212,13 +212,11 @@ def _get_parent_allocated_old_asset_dep(db: Session, org: Organization) -> tuple
 
 
 def _aggregate_entries(entries) -> dict:
-    result = defaultdict(lambda: {"description": "", "total_yayasan": 0.0, "total_bos": 0.0, "category": None})
+    result = defaultdict(lambda: {"total_yayasan": 0.0, "total_bos": 0.0, "category": None})
     for e in entries:
         cid = e.expense_category_id
         result[cid]["total_yayasan"] += e.foundation or 0.0
         result[cid]["total_bos"] += e.bos or 0.0
-        if e.description and not result[cid]["description"]:
-            result[cid]["description"] = e.description
         if result[cid]["category"] is None and e.expense_category is not None:
             result[cid]["category"] = e.expense_category
     return result
@@ -239,7 +237,7 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
             total = data["total_yayasan"] + data["total_bos"]
             components.append(UPComponentItem(
                 account_code=cat.code,
-                description=data["description"] or cat.label,
+                description=cat.label,
                 total_yayasan=data["total_yayasan"],
                 total_bos=data["total_bos"],
                 total=total,
@@ -312,7 +310,7 @@ def simulate_us(db: Session, org: Organization) -> USSimulation:
             total = data["total_yayasan"] + data["total_bos"]
             components.append(USComponentItem(
                 account_code=cat.code,
-                description=data["description"] or cat.label,
+                description=cat.label,
                 total_yayasan=data["total_yayasan"],
                 total_bos=data["total_bos"],
                 total=total,
@@ -405,7 +403,7 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
                     for ga in e.grade_allocations
                 )
                 amount = grade_total if grade_total else amount
-            items.append(IncomeItem(account_code=income_code, description=data["description"] or cat.label, total=amount, auto_total=amount))
+            items.append(IncomeItem(account_code=income_code, description=income_cat.label if income_cat else cat.label, total=amount, auto_total=amount))
             total += amount
             total_auto += amount
 
@@ -424,17 +422,16 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
                     total_auto += total_bos
 
         income_entries = crud_income.list_by_org(db, org.id)
-        income_agg = defaultdict(lambda: {"total": 0.0, "desc": "", "code": ""})
+        income_agg = defaultdict(lambda: {"total": 0.0, "code": "", "label": ""})
         for ie in income_entries:
             cid = ie.income_category_id
             income_agg[cid]["total"] += ie.amount or 0.0
-            if not income_agg[cid]["desc"] and ie.description:
-                income_agg[cid]["desc"] = ie.description
             if ie.income_category:
                 income_agg[cid]["code"] = ie.income_category.code
+                income_agg[cid]["label"] = ie.income_category.label
         for cid, data in sorted(income_agg.items()):
             if data["total"]:
-                items.append(IncomeItem(account_code=data["code"], description=data["desc"] or data["code"], total=data["total"], auto_total=data["total"]))
+                items.append(IncomeItem(account_code=data["code"], description=data["label"] or data["code"], total=data["total"], auto_total=data["total"]))
                 total += data["total"]
                 total_auto += data["total"]
 
@@ -470,17 +467,16 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
                 total_auto += contribution_us_auto
 
         income_entries = crud_income.list_by_org(db, org.id)
-        income_agg = defaultdict(lambda: {"total": 0.0, "desc": "", "code": ""})
+        income_agg = defaultdict(lambda: {"total": 0.0, "code": "", "label": ""})
         for ie in income_entries:
             cid = ie.income_category_id
             income_agg[cid]["total"] += ie.amount or 0.0
-            if not income_agg[cid]["desc"] and ie.description:
-                income_agg[cid]["desc"] = ie.description
             if ie.income_category:
                 income_agg[cid]["code"] = ie.income_category.code
+                income_agg[cid]["label"] = ie.income_category.label
         for cid, data in sorted(income_agg.items()):
             if data["total"]:
-                items.append(IncomeItem(account_code=data["code"], description=data["desc"] or data["code"], total=data["total"], auto_total=data["total"]))
+                items.append(IncomeItem(account_code=data["code"], description=data["label"] or data["code"], total=data["total"], auto_total=data["total"]))
                 total += data["total"]
                 total_auto += data["total"]
 
@@ -528,7 +524,7 @@ def simulate_expenses(db: Session, org: Organization) -> ExpenseSimulation:
         total = data["total_yayasan"] + data["total_bos"]
         item = ExpenseAccountSummary(
             account_code=cat.code,
-            description=data["description"] or cat.label,
+            description=cat.label,
             total_yayasan=data["total_yayasan"],
             total_bos=data["total_bos"],
             total=total,

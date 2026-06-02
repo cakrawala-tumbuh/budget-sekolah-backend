@@ -126,6 +126,49 @@ def _get_parent_allocated_components(
     return up_components, us_components, total_up, total_us
 
 
+def _get_parent_allocated_old_asset_dep(db: Session, org: Organization) -> float:
+    """
+    Hitung porsi depresiasi aset lama tahun berjalan dari organisasi induk
+    (Cabang dan Pusat) yang dialokasikan ke unit ini, menambah beban UP.
+
+    Depresiasi aset lama tahun ini di setiap ancestor (Cabang lalu Pusat)
+    didistribusikan ke unit secara proporsional berdasarkan new_students —
+    proporsi UP yang sama dengan alokasi biaya induk. Override per-unit
+    menggunakan override_pct_up di ContributionAllocation ancestor.
+
+    Args:
+        db: Database session.
+        org: Organisasi anak (UNIT) penerima alokasi.
+
+    Returns:
+        Total depresiasi aset lama induk (Cabang + Pusat) yang dialokasikan
+        ke unit ini.
+    """
+    fiscal_year = _fiscal_year(settings.budget_year)
+    total = 0.0
+    ancestor = org.parent
+    while ancestor is not None:
+        old_assets = crud_misc.list_dep_by_org(db, ancestor.id)
+        ancestor_dep = sum(a.dep_current_year(fiscal_year) for a in old_assets)
+        if ancestor_dep:
+            # Proporsi UP unit ini terhadap seluruh kontributor di ancestor
+            sibling_allocs = crud_misc.list_allocations(db, ancestor.id)
+            total_new_all = sum(a.new_students for a in sibling_allocs) or 1
+            this_alloc = next(
+                (a for a in sibling_allocs if a.from_organization_id == org.id),
+                None,
+            )
+            if this_alloc is not None:
+                pct_up = (
+                    this_alloc.override_pct_up
+                    if this_alloc.override_pct_up is not None
+                    else (this_alloc.new_students / total_new_all)
+                )
+                total += pct_up * ancestor_dep
+        ancestor = ancestor.parent
+    return total
+
+
 def _aggregate_entries(entries) -> dict:
     result = defaultdict(lambda: {"description": "", "total_yayasan": 0.0, "total_bos": 0.0, "category": None})
     for e in entries:
@@ -169,9 +212,13 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
     fiscal_year = _fiscal_year(settings.budget_year)
     old_assets = crud_misc.list_dep_by_org(db, org.id)
     old_asset_dep = sum(old.dep_current_year(fiscal_year) for old in old_assets)
-    total_up_cost_with_dep = total_up_cost + new_investment_dep + old_asset_dep
+    # Depresiasi aset lama tahun ini di Cabang/Pusat dialokasikan ke unit,
+    # menambah beban (alokasi) UP unit.
+    parent_allocated_old_asset_dep = _get_parent_allocated_old_asset_dep(db, org)
+    total_dep = new_investment_dep + old_asset_dep + parent_allocated_old_asset_dep
+    total_up_cost_with_dep = total_up_cost + total_dep
     new_student_count = (assumption.new_student_count if assumption else 0) or 1
-    dep_per_student = (new_investment_dep + old_asset_dep) / new_student_count
+    dep_per_student = total_dep / new_student_count
     auto_up_rate = total_up_cost_with_dep / new_student_count
     # Override hanya menggantikan komponen biaya (5130.xx + alokasi induk).
     # Depresiasi aset baru dan lama selalu ditambahkan ke tarif akhir,
@@ -189,6 +236,7 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
         parent_allocated_up_cost=parent_allocated_up_cost,
         new_investment_dep=new_investment_dep,
         old_asset_dep=old_asset_dep,
+        parent_allocated_old_asset_dep=parent_allocated_old_asset_dep,
         total_up_cost_with_dep=total_up_cost_with_dep,
         new_student_count=new_student_count,
         auto_up_rate=auto_up_rate,

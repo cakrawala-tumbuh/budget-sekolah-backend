@@ -289,3 +289,156 @@ class TestCabangIncomeSimulation:
         # total_base_cost_up/us = total pool revenue dari semua unit
         assert abs(data["total_base_cost_up"] - up_revenue) < 1.0
         assert abs(data["total_base_cost_us"] - us_revenue) < 1.0
+
+
+class TestParentDepreciationAllocation:
+    """
+    Depresiasi aset lama tahun ini di Cabang/Pusat menambah alokasi UP unit.
+
+    Aset lama induk (Cabang/Pusat) yang masih disusutkan tahun berjalan
+    didistribusikan ke unit secara proporsional berdasarkan new_students,
+    lalu menambah beban UP unit (di luar komponen biaya UP unit sendiri).
+    """
+
+    def _make_unit(self, client, code: str, parent_id: int) -> int:
+        org_id = client.post("/organizations", json={
+            "code": code, "name": f"SD {code}", "org_type": "UNIT",
+            "parent_id": parent_id,
+        }).json()["id"]
+        client.put(f"/organizations/{org_id}/assumption", json={
+            "grade_1": 60, "grade_2": 0, "grade_3": 0, "grade_4": 0,
+            "grade_5": 0, "grade_6": 0,
+            "new_student_count": 60, "returning_student_count": 0, "staff_count": 5,
+        })
+        # 5130.01 -> komponen UP = 36_000_000
+        cat = _expense_cat_id(client, "5130.01")
+        client.post(f"/organizations/{org_id}/budget-entries", json={
+            "expense_category_id": cat, "line_number": 1,
+            "description": "Pengabdian", "foundation": 36_000_000.0, "bos": 0.0,
+        })
+        return org_id
+
+    def _add_old_asset(self, client, org_id: int, cost: float,
+                       year: int = 2024, life: int = 4, name: str = "Aset Lama Induk"):
+        return client.post(f"/organizations/{org_id}/depreciation", json={
+            "asset_name": name, "acquisition_cost": cost,
+            "useful_life": life, "acquisition_year": year,
+        })
+
+    def _register(self, client, parent_id: int, unit_id: int, new_students: int,
+                  total_students: int = 326, **extra):
+        return client.put(f"/organizations/{parent_id}/contribution-allocations", json={
+            "from_organization_id": unit_id,
+            "total_students": total_students,
+            "new_students": new_students,
+            **extra,
+        })
+
+    def test_cabang_old_asset_dep_adds_to_unit_up(self, client):
+        pusat = client.post("/organizations", json={
+            "code": "PST-DEP-A", "name": "Pusat A", "org_type": "PUSAT",
+        }).json()["id"]
+        cabang = client.post("/organizations", json={
+            "code": "CBG-DEP-A", "name": "Cabang A", "org_type": "CABANG",
+            "parent_id": pusat,
+        }).json()["id"]
+        unit = self._make_unit(client, "SD-DEP-A", cabang)
+        # Unit satu-satunya kontributor cabang -> pct_up = 1.0
+        self._register(client, cabang, unit, new_students=60)
+        # Aset lama cabang: 12_000_000 / 4 -> dep tahun ini = 3_000_000
+        self._add_old_asset(client, cabang, 12_000_000.0)
+
+        data = client.get(f"/organizations/{unit}/simulation/up").json()
+        assert data["parent_allocated_old_asset_dep"] == 3_000_000.0
+        # Komponen biaya UP unit murni 36 jt (tidak termasuk dep induk)
+        assert data["total_up_cost"] == 36_000_000.0
+        assert data["old_asset_dep"] == 0.0
+        assert data["total_up_cost_with_dep"] == 39_000_000.0
+        assert abs(data["final_up_rate"] - 39_000_000.0 / 60) < 1.0
+
+    def test_pusat_and_cabang_dep_both_allocated(self, client):
+        pusat = client.post("/organizations", json={
+            "code": "PST-DEP-B", "name": "Pusat B", "org_type": "PUSAT",
+        }).json()["id"]
+        cabang = client.post("/organizations", json={
+            "code": "CBG-DEP-B", "name": "Cabang B", "org_type": "CABANG",
+            "parent_id": pusat,
+        }).json()["id"]
+        unit = self._make_unit(client, "SD-DEP-B", cabang)
+        # Unit terdaftar sebagai kontributor di cabang dan pusat (pct_up = 1.0 keduanya)
+        self._register(client, cabang, unit, new_students=60)
+        self._register(client, pusat, unit, new_students=60)
+        # Cabang: 12_000_000 / 4 -> 3_000_000 ; Pusat: 8_000_000 / 4 -> 2_000_000
+        self._add_old_asset(client, cabang, 12_000_000.0)
+        self._add_old_asset(client, pusat, 8_000_000.0)
+
+        data = client.get(f"/organizations/{unit}/simulation/up").json()
+        assert data["parent_allocated_old_asset_dep"] == 5_000_000.0
+        assert data["total_up_cost_with_dep"] == 41_000_000.0
+
+    def test_dep_split_proportionally_between_units(self, client):
+        cabang = client.post("/organizations", json={
+            "code": "CBG-DEP-C", "name": "Cabang C", "org_type": "CABANG",
+        }).json()["id"]
+        unit_a = self._make_unit(client, "SD-DEP-C1", cabang)
+        unit_b = self._make_unit(client, "SD-DEP-C2", cabang)
+        # Proporsi new_students: A=60, B=40 dari total 100 -> 0.6 / 0.4
+        self._register(client, cabang, unit_a, new_students=60)
+        self._register(client, cabang, unit_b, new_students=40)
+        # Aset lama cabang: 12_000_000 / 4 -> dep tahun ini = 3_000_000
+        self._add_old_asset(client, cabang, 12_000_000.0)
+
+        data_a = client.get(f"/organizations/{unit_a}/simulation/up").json()
+        data_b = client.get(f"/organizations/{unit_b}/simulation/up").json()
+        assert abs(data_a["parent_allocated_old_asset_dep"] - 1_800_000.0) < 1.0
+        assert abs(data_b["parent_allocated_old_asset_dep"] - 1_200_000.0) < 1.0
+
+    def test_override_pct_up_respected(self, client):
+        cabang = client.post("/organizations", json={
+            "code": "CBG-DEP-D", "name": "Cabang D", "org_type": "CABANG",
+        }).json()["id"]
+        unit = self._make_unit(client, "SD-DEP-D", cabang)
+        # Override proporsi UP unit ke 0.25
+        self._register(client, cabang, unit, new_students=60, override_pct_up=0.25)
+        # Aset lama cabang: 12_000_000 / 4 -> 3_000_000 ; 0.25 * 3_000_000 = 750_000
+        self._add_old_asset(client, cabang, 12_000_000.0)
+
+        data = client.get(f"/organizations/{unit}/simulation/up").json()
+        assert abs(data["parent_allocated_old_asset_dep"] - 750_000.0) < 1.0
+
+    def test_override_up_rate_still_adds_parent_dep(self, client):
+        """Override tarif UP hanya mengganti komponen biaya; dep induk tetap ditambah."""
+        cabang = client.post("/organizations", json={
+            "code": "CBG-DEP-E", "name": "Cabang E", "org_type": "CABANG",
+        }).json()["id"]
+        unit = self._make_unit(client, "SD-DEP-E", cabang)
+        client.put(f"/organizations/{unit}/assumption", json={
+            "grade_1": 60, "grade_2": 0, "grade_3": 0, "grade_4": 0,
+            "grade_5": 0, "grade_6": 0,
+            "new_student_count": 60, "returning_student_count": 0, "staff_count": 5,
+            "override_up_rate": 1_000_000.0,
+        })
+        self._register(client, cabang, unit, new_students=60)
+        self._add_old_asset(client, cabang, 12_000_000.0)  # dep = 3_000_000
+
+        data = client.get(f"/organizations/{unit}/simulation/up").json()
+        assert data["parent_allocated_old_asset_dep"] == 3_000_000.0
+        # final = override + dep_induk/siswa_baru
+        assert abs(data["final_up_rate"] - (1_000_000.0 + 3_000_000.0 / 60)) < 1.0
+
+    def test_no_parent_dep_when_unit_unregistered(self, client):
+        cabang = client.post("/organizations", json={
+            "code": "CBG-DEP-F", "name": "Cabang F", "org_type": "CABANG",
+        }).json()["id"]
+        unit = self._make_unit(client, "SD-DEP-F", cabang)
+        # Tidak didaftarkan ke contribution-allocations cabang
+        self._add_old_asset(client, cabang, 12_000_000.0)
+
+        data = client.get(f"/organizations/{unit}/simulation/up").json()
+        assert data["parent_allocated_old_asset_dep"] == 0.0
+
+    def test_no_parent_dep_for_standalone_unit(self, client):
+        """Unit tanpa induk tidak memperoleh alokasi depresiasi induk."""
+        unit = _setup_unit(client, "SD-DEP-G")
+        data = client.get(f"/organizations/{unit}/simulation/up").json()
+        assert data["parent_allocated_old_asset_dep"] == 0.0

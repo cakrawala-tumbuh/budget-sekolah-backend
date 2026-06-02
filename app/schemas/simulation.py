@@ -22,6 +22,8 @@ class UPSimulation(BaseModel):
     parent_allocated_up_cost: float
     new_investment_dep: float
     old_asset_dep: float
+    # Depresiasi aset lama Cabang/Pusat yang dialokasikan ke unit (menambah UP)
+    parent_allocated_old_asset_dep: float
     total_up_cost_with_dep: float
     new_student_count: int
     auto_up_rate: float

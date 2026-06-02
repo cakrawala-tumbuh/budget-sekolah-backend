@@ -95,8 +95,8 @@ class TestUPSimulation:
         assert data["final_up_rate"] == 1_000_000.0
         assert data["total_up_revenue"] == 60_000_000.0
 
-    def test_up_override_always_includes_dep(self, client):
-        """Override hanya menggantikan komponen biaya; depresiasi selalu ditambah di atas."""
+    def test_up_override_is_final_rate_without_dep(self, client):
+        """Override tarif UP adalah tarif final; depresiasi TIDAK ditambahkan di atasnya."""
         org_id = _setup_unit(client, "SD-SIM-UP5")
         # Set override
         client.put(f"/organizations/{org_id}/assumption", json={
@@ -113,12 +113,12 @@ class TestUPSimulation:
         })
         resp = client.get(f"/organizations/{org_id}/simulation/up")
         data = resp.json()
-        dep = data["old_asset_dep"]
-        assert dep == 3_000_000.0
-        dep_per_student = dep / 60
-        # final_up_rate = override + dep/siswa_baru
-        assert abs(data["final_up_rate"] - (1_000_000.0 + dep_per_student)) < 1.0
-        assert abs(data["total_up_revenue"] - data["final_up_rate"] * 60) < 1.0
+        # Depresiasi tetap dilaporkan & masuk tarif otomatis: (36jt + 3jt)/60 = 650rb.
+        assert data["old_asset_dep"] == 3_000_000.0
+        assert abs(data["auto_up_rate"] - 650_000.0) < 1.0
+        # ...tetapi tarif & pendapatan final memakai override apa adanya (tanpa dep).
+        assert data["final_up_rate"] == 1_000_000.0
+        assert abs(data["total_up_revenue"] - 1_000_000.0 * 60) < 1.0
 
     def test_up_only_for_unit(self, client):
         cabang = client.post("/organizations", json={
@@ -410,8 +410,8 @@ class TestParentDepreciationAllocation:
         data = client.get(f"/organizations/{unit}/simulation/up").json()
         assert abs(data["cabang_allocated_old_asset_dep"] - 750_000.0) < 1.0
 
-    def test_override_up_rate_still_adds_parent_dep(self, client):
-        """Override tarif UP hanya mengganti komponen biaya; dep induk tetap ditambah."""
+    def test_override_up_rate_ignores_parent_dep(self, client):
+        """Override tarif UP adalah tarif final; dep induk tidak ditambahkan ke tarif final."""
         cabang = client.post("/organizations", json={
             "code": "CBG-DEP-E", "name": "Cabang E", "org_type": "CABANG",
         }).json()["id"]
@@ -426,9 +426,11 @@ class TestParentDepreciationAllocation:
         self._add_old_asset(client, cabang, 12_000_000.0)  # dep = 3_000_000
 
         data = client.get(f"/organizations/{unit}/simulation/up").json()
+        # Dep induk tetap dialokasikan & masuk tarif otomatis: (36jt + 3jt)/60 = 650rb.
         assert data["cabang_allocated_old_asset_dep"] == 3_000_000.0
-        # final = override + dep_induk/siswa_baru
-        assert abs(data["final_up_rate"] - (1_000_000.0 + 3_000_000.0 / 60)) < 1.0
+        assert abs(data["auto_up_rate"] - 650_000.0) < 1.0
+        # ...tetapi tarif final memakai override apa adanya, tanpa tambahan dep.
+        assert data["final_up_rate"] == 1_000_000.0
 
     def test_no_parent_dep_when_unit_unregistered(self, client):
         cabang = client.post("/organizations", json={

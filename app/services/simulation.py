@@ -266,15 +266,12 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
     )
     total_up_cost_with_dep = total_up_cost + total_dep
     new_student_count = (assumption.new_student_count if assumption else 0) or 1
-    dep_per_student = total_dep / new_student_count
     auto_up_rate = total_up_cost_with_dep / new_student_count
-    # Override hanya menggantikan komponen biaya (5130.xx + alokasi induk).
-    # Depresiasi aset baru dan lama selalu ditambahkan ke tarif akhir,
-    # sehingga perubahan data depresiasi selalu tercermin pada besaran UP.
+    # Override tarif UP diambil apa adanya dari asumsi unit sebagai tarif final
+    # (tidak ditambah depresiasi atau komponen apa pun). Tanpa override, tarif
+    # final = hasil kalkulasi otomatis (komponen biaya + seluruh depresiasi).
     override = assumption.override_up_rate if assumption else None
-    auto_component_rate = total_up_cost / new_student_count
-    component_rate = override if override is not None else auto_component_rate
-    final_up_rate = component_rate + dep_per_student
+    final_up_rate = override if override is not None else auto_up_rate
     total_up_revenue = final_up_rate * new_student_count
     auto_up_revenue = auto_up_rate * new_student_count
 

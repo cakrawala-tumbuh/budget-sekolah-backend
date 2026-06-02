@@ -27,6 +27,7 @@ from .routers import (
     depreciation_router,
     contributions_router,
     parent_expense_allocations_router,
+    subsidies_router,
     simulation_router,
     auth_router,
     users_router,
@@ -102,6 +103,7 @@ app.include_router(investments_router)
 app.include_router(depreciation_router)
 app.include_router(contributions_router)
 app.include_router(parent_expense_allocations_router)
+app.include_router(subsidies_router)
 app.include_router(simulation_router)
 
 

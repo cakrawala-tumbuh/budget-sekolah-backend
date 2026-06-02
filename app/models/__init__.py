@@ -12,6 +12,7 @@ from .investment import Investment
 from .depreciation import DepreciationOldAsset
 from .contribution_allocation import ContributionAllocation
 from .parent_expense_allocation import ParentExpenseAllocation
+from .subsidy import Subsidy
 from .user import User
 
 __all__ = [
@@ -30,5 +31,6 @@ __all__ = [
     "DepreciationOldAsset",
     "ContributionAllocation",
     "ParentExpenseAllocation",
+    "Subsidy",
     "User",
 ]

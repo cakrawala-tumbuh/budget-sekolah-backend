@@ -10,6 +10,7 @@ from .investments import router as investments_router
 from .depreciation import router as depreciation_router
 from .contributions import router as contributions_router
 from .parent_expense_allocations import router as parent_expense_allocations_router
+from .subsidies import router as subsidies_router
 from .simulation import router as simulation_router
 from .auth import router as auth_router
 from .users import router as users_router
@@ -28,6 +29,7 @@ __all__ = [
     "depreciation_router",
     "contributions_router",
     "parent_expense_allocations_router",
+    "subsidies_router",
     "simulation_router",
     "auth_router",
     "users_router",

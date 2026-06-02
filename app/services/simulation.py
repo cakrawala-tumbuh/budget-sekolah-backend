@@ -10,6 +10,7 @@ from ..config import settings
 from ..crud import budget_entry as crud_entry, assumption as crud_assumption
 from ..crud import investment as crud_inv, misc as crud_misc, income_entry as crud_income
 from ..crud import parent_expense_allocation as crud_pea
+from ..crud import subsidy as crud_subsidy
 from ..models.organization import Organization, OrgType
 from ..models.income_category import IncomeCalcMethod
 from ..schemas.simulation import (
@@ -483,6 +484,31 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
                 total += data["total"]
                 total_auto += data["total"]
 
+    # Subsidi yang DITERIMA org ini dari Cabang/Pusat menjadi pendapatan,
+    # dikelompokkan per kategori pendapatan tujuan. Berlaku untuk UNIT maupun
+    # CABANG penerima.
+    subsidies_in = crud_subsidy.list_active_by_recipient(db, org.id)
+    subsidy_income_agg = defaultdict(lambda: {"total": 0.0, "code": "", "label": ""})
+    for sub in subsidies_in:
+        amount = sub.amount or 0.0
+        if not amount:
+            continue
+        key = sub.income_category_id
+        subsidy_income_agg[key]["total"] += amount
+        if sub.income_category:
+            subsidy_income_agg[key]["code"] = sub.income_category.code
+            subsidy_income_agg[key]["label"] = sub.income_category.label
+    for data in subsidy_income_agg.values():
+        provider_label = data["label"] or "Subsidi"
+        items.append(IncomeItem(
+            account_code=data["code"],
+            description=f"Subsidi diterima — {provider_label}",
+            total=data["total"],
+            auto_total=data["total"],
+        ))
+        total += data["total"]
+        total_auto += data["total"]
+
     return IncomeSimulation(items=items, total=total, total_auto=total_auto)
 
 
@@ -513,6 +539,38 @@ def simulate_expenses(db: Session, org: Organization) -> ExpenseSimulation:
         else:
             non_operational.append(item)
             total_non_op += total
+
+    # Subsidi yang DIBERIKAN org ini ke penerima menjadi beban, dikelompokkan
+    # per kategori biaya pemberi dan diklasifikasikan operasional/non-operasional
+    # sesuai flag kategori (kategori subsidi 5590.xx bersifat non-operasional).
+    subsidies_out = crud_subsidy.list_active_by_provider(db, org.id)
+    subsidy_expense_agg = defaultdict(
+        lambda: {"total": 0.0, "code": "", "label": "", "is_operational": False}
+    )
+    for sub in subsidies_out:
+        amount = sub.amount or 0.0
+        if not amount:
+            continue
+        key = sub.expense_category_id
+        subsidy_expense_agg[key]["total"] += amount
+        if sub.expense_category:
+            subsidy_expense_agg[key]["code"] = sub.expense_category.code
+            subsidy_expense_agg[key]["label"] = sub.expense_category.label
+            subsidy_expense_agg[key]["is_operational"] = sub.expense_category.is_operational
+    for data in subsidy_expense_agg.values():
+        item = ExpenseAccountSummary(
+            account_code=data["code"],
+            description=f"Subsidi ke unit — {data['label'] or 'Subsidi'}",
+            total_yayasan=data["total"],
+            total_bos=0.0,
+            total=data["total"],
+        )
+        if data["is_operational"]:
+            operational.append(item)
+            total_op += data["total"]
+        else:
+            non_operational.append(item)
+            total_non_op += data["total"]
 
     return ExpenseSimulation(
         operational=operational,

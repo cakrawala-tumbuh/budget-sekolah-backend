@@ -24,6 +24,10 @@ class UPSimulation(BaseModel):
     pusat_allocated_up_cost: float
     new_investment_dep: float
     old_asset_dep: float
+    # Depresiasi investasi baru tahun berjalan induk yang dialokasikan ke unit
+    # (menambah UP), dipisahkan antara Cabang dan Pusat
+    cabang_allocated_new_investment_dep: float
+    pusat_allocated_new_investment_dep: float
     # Depresiasi aset lama induk yang dialokasikan ke unit (menambah UP),
     # dipisahkan antara Cabang dan Pusat
     cabang_allocated_old_asset_dep: float

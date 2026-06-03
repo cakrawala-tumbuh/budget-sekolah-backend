@@ -330,25 +330,55 @@ class TestBudgetSummary:
 
 
 class TestCabangIncomeSimulation:
-    """Pendapatan CABANG berasal dari kontribusi UP/US setiap child UNIT."""
+    """
+    Pendapatan CABANG = setoran (alokasi) tiap child UNIT: porsi beban induk
+    (UP+US) + depresiasi induk. Setoran ini identik dengan beban alokasi yang
+    ditanggung unit, sehingga buku unit & induk konsolidasi 1:1.
+    """
 
     def _setup_cabang_with_unit(self, client, suffix: str):
-        """Buat CABANG dan satu child UNIT dengan data lengkap, lalu daftarkan alokasi."""
+        """CABANG dengan beban, PEA, & depresiasi sendiri, plus satu child UNIT terdaftar."""
         cabang_id = client.post("/organizations", json={
             "code": f"CBG-INC-{suffix}", "name": f"Cabang Income {suffix}", "org_type": "CABANG",
         }).json()["id"]
-
-        unit_id = _setup_unit(client, f"SD-CBG-INC-{suffix}")
-
-        # Tarif kontribusi unit: UP 12% ke cabang, US 10% ke cabang
-        client.put(f"/organizations/{unit_id}/contribution-rates", json={
-            "up_to_pusat": 0.04, "up_to_cabang": 0.12,
-            "us_to_pusat": 0.05, "us_to_cabang": 0.10,
-            "development_fund": 0.20, "deficit_reserve": 0.05,
-            "social_care": 0.03, "teacher_study": 0.03,
+        # Unit harus anak (parent_id) cabang agar beban alokasi tercatat di unit
+        unit_id = client.post("/organizations", json={
+            "code": f"SD-CBG-INC-{suffix}", "name": f"SD {suffix}",
+            "org_type": "UNIT", "parent_id": cabang_id,
+        }).json()["id"]
+        client.put(f"/organizations/{unit_id}/assumption", json={
+            "grade_1": 60, "grade_2": 0, "grade_3": 0, "grade_4": 0,
+            "grade_5": 0, "grade_6": 0,
+            "new_student_count": 60, "returning_student_count": 0, "staff_count": 5,
         })
 
-        # Daftarkan unit sebagai kontributor ke cabang
+        cat_dev = _expense_cat_id(client, "5130.01")   # UP component
+        cat_gaji = _expense_cat_id(client, "5110.01")  # US component
+        # Beban cabang: dev 24jt (UP), gaji 120jt (US)
+        client.post(f"/organizations/{cabang_id}/budget-entries", json={
+            "expense_category_id": cat_dev, "line_number": 1,
+            "description": "Dev Cabang", "foundation": 24_000_000.0, "bos": 0.0,
+        })
+        client.post(f"/organizations/{cabang_id}/budget-entries", json={
+            "expense_category_id": cat_gaji, "line_number": 1,
+            "description": "Gaji Cabang", "foundation": 120_000_000.0, "bos": 0.0,
+        })
+        client.post(f"/organizations/{cabang_id}/parent-expense-allocations",
+                    json={"expense_category_id": cat_dev, "affects_up": True})
+        client.post(f"/organizations/{cabang_id}/parent-expense-allocations",
+                    json={"expense_category_id": cat_gaji, "affects_up": False})
+        # Aset lama cabang 12jt/4 -> 3jt; investasi baru 24jt/4 mulai bln 1 -> 6jt
+        client.post(f"/organizations/{cabang_id}/depreciation", json={
+            "asset_name": "Aset Lama Cabang", "acquisition_cost": 12_000_000.0,
+            "useful_life": 4, "acquisition_year": 2024,
+        })
+        inv_cat_id = _invest_cat_id(client, "1330.02")
+        client.post(f"/organizations/{cabang_id}/investments", json={
+            "investment_category_id": inv_cat_id, "asset_name": "Laptop Cabang",
+            "purchase_price": 24_000_000.0, "useful_life": 4, "start_month": 1,
+        })
+
+        # Unit kontributor tunggal -> pct_up = pct_us = 1.0
         client.put(f"/organizations/{cabang_id}/contribution-allocations", json={
             "from_organization_id": unit_id,
             "total_students": 326,
@@ -356,24 +386,37 @@ class TestCabangIncomeSimulation:
         })
         return cabang_id, unit_id
 
-    def test_cabang_income_uses_unit_up_us_revenue(self, client):
-        """Kontribusi UP/US ke CABANG = revenue aktual unit × tarif unit, bukan pengeluaran cabang."""
-        cabang_id, unit_id = self._setup_cabang_with_unit(client, "A")
-
-        up_revenue = client.get(f"/organizations/{unit_id}/simulation/up").json()["total_up_revenue"]
-        us_revenue = client.get(f"/organizations/{unit_id}/simulation/us").json()["total_us_revenue"]
-        expected_up = up_revenue * 0.12
-        expected_us = us_revenue * 0.10
-
+    def test_cabang_income_from_unit_setoran(self, client):
+        """Kontribusi UP/US ke CABANG = porsi beban + depresiasi cabang, bukan revenue unit."""
+        cabang_id, _ = self._setup_cabang_with_unit(client, "A")
         resp = client.get(f"/organizations/{cabang_id}/simulation/income")
         assert resp.status_code == 200
         data = resp.json()
 
         total_up = sum(i["total"] for i in data["items"] if i["account_code"] == "4630.01")
         total_us = sum(i["total"] for i in data["items"] if i["account_code"] == "4630.02")
-        assert abs(total_up - expected_up) < 1.0
-        assert abs(total_us - expected_us) < 1.0
-        assert abs(data["total"] - (expected_up + expected_us)) < 1.0
+        # Setoran UP = beban UP 24jt + depresiasi (6jt baru + 3jt lama) = 33jt
+        assert abs(total_up - 33_000_000.0) < 1.0
+        # Setoran US = beban US 120jt
+        assert abs(total_us - 120_000_000.0) < 1.0
+        assert abs(data["total"] - 153_000_000.0) < 1.0
+
+    def test_cabang_income_reconciles_with_unit_expense(self, client):
+        """Setoran yang diterima cabang = beban alokasi yang dicatat unit (rekonsiliasi 1:1)."""
+        cabang_id, unit_id = self._setup_cabang_with_unit(client, "REC")
+
+        income = client.get(f"/organizations/{cabang_id}/simulation/income").json()
+        cabang_from_unit = sum(
+            i["total"] for i in income["items"]
+            if i["account_code"] in ("4630.01", "4630.02")
+        )
+
+        expenses = client.get(f"/organizations/{unit_id}/simulation/expenses").json()
+        unit_alloc_expense = sum(
+            r["total"] for r in expenses["operational"]
+            if r["account_code"].startswith("ALLOC")
+        )
+        assert abs(cabang_from_unit - unit_alloc_expense) < 1.0
 
     def test_cabang_income_zero_without_allocations(self, client):
         """CABANG tanpa child unit terdaftar menghasilkan total pendapatan 0."""
@@ -384,24 +427,23 @@ class TestCabangIncomeSimulation:
         assert resp.status_code == 200
         assert resp.json()["total"] == 0.0
 
-    def test_allocation_simulation_uses_unit_revenue(self, client):
-        """simulate_allocation menampilkan kontribusi berdasarkan revenue aktual unit."""
-        cabang_id, unit_id = self._setup_cabang_with_unit(client, "B")
-
-        up_revenue = client.get(f"/organizations/{unit_id}/simulation/up").json()["total_up_revenue"]
-        us_revenue = client.get(f"/organizations/{unit_id}/simulation/us").json()["total_us_revenue"]
-
+    def test_allocation_simulation_uses_alloc_base(self, client):
+        """simulate_allocation: kontribusi = setoran alokasi; base = total biaya induk."""
+        cabang_id, _ = self._setup_cabang_with_unit(client, "B")
         resp = client.get(f"/organizations/{cabang_id}/simulation/allocation")
         assert resp.status_code == 200
         data = resp.json()
 
         assert len(data["units"]) == 1
         u = data["units"][0]
-        assert abs(u["contribution_up"] - up_revenue * 0.12) < 1.0
-        assert abs(u["contribution_us"] - us_revenue * 0.10) < 1.0
-        # total_base_cost_up/us = total pool revenue dari semua unit
-        assert abs(data["total_base_cost_up"] - up_revenue) < 1.0
-        assert abs(data["total_base_cost_us"] - us_revenue) < 1.0
+        # Unit kontributor tunggal -> pct 1.0
+        assert abs(u["pct_up"] - 1.0) < 0.001
+        assert abs(u["pct_us"] - 1.0) < 0.001
+        assert abs(u["contribution_up"] - 33_000_000.0) < 1.0
+        assert abs(u["contribution_us"] - 120_000_000.0) < 1.0
+        # base UP = beban UP 24jt + depresiasi 9jt; base US = 120jt
+        assert abs(data["total_base_cost_up"] - 33_000_000.0) < 1.0
+        assert abs(data["total_base_cost_us"] - 120_000_000.0) < 1.0
 
 
 class TestParentDepreciationAllocation:
@@ -544,6 +586,26 @@ class TestParentDepreciationAllocation:
         assert abs(data["auto_up_rate"] - 650_000.0) < 1.0
         # ...tetapi tarif final memakai override apa adanya, tanpa tambahan dep.
         assert data["final_up_rate"] == 1_000_000.0
+
+    def test_cabang_new_investment_dep_adds_to_unit_up(self, client):
+        """Depresiasi tahun berjalan investasi baru Cabang menambah tarif UP unit."""
+        cabang = client.post("/organizations", json={
+            "code": "CBG-DEP-NI", "name": "Cabang NI", "org_type": "CABANG",
+        }).json()["id"]
+        unit = self._make_unit(client, "SD-DEP-NI", cabang)
+        self._register(client, cabang, unit, new_students=60)
+        # Investasi baru cabang: 24jt / 4, mulai bulan 1 -> dep tahun ini = 6jt
+        inv_cat_id = _invest_cat_id(client, "1330.02")
+        client.post(f"/organizations/{cabang}/investments", json={
+            "investment_category_id": inv_cat_id, "asset_name": "Laptop Cabang",
+            "purchase_price": 24_000_000.0, "useful_life": 4, "start_month": 1,
+        })
+        data = client.get(f"/organizations/{unit}/simulation/up").json()
+        assert abs(data["cabang_allocated_new_investment_dep"] - 6_000_000.0) < 1.0
+        assert data["pusat_allocated_new_investment_dep"] == 0.0
+        # UP unit ter-gross-up: 36jt komponen + 6jt dep investasi baru cabang
+        assert abs(data["total_up_cost_with_dep"] - 42_000_000.0) < 1.0
+        assert abs(data["final_up_rate"] - 42_000_000.0 / 60) < 1.0
 
     def test_no_parent_dep_when_unit_unregistered(self, client):
         cabang = client.post("/organizations", json={

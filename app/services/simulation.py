@@ -54,6 +54,38 @@ def _ancestor_up_pct(this_alloc, total_new_all: int) -> float:
     return this_alloc.new_students / total_new_all
 
 
+def _ancestor_pcts(
+    db: Session, org: Organization, ancestor: Organization
+) -> tuple[float, float] | None:
+    """
+    Proporsi (pct_up, pct_us) org di suatu ancestor berdasarkan
+    ContributionAllocation.
+
+    - pct_up = new_students / total new_students kontributor (override_pct_up).
+    - pct_us = total_students / total students kontributor (override_pct_us).
+
+    Returns:
+        Tuple (pct_up, pct_us), atau None bila org tidak terdaftar sebagai
+        kontributor di ancestor.
+    """
+    sibling_allocs = crud_misc.list_allocations(db, ancestor.id)
+    this_alloc = next(
+        (a for a in sibling_allocs if a.from_organization_id == org.id),
+        None,
+    )
+    if this_alloc is None:
+        return None
+    total_students_all = sum(a.total_students for a in sibling_allocs) or 1
+    total_new_all = sum(a.new_students for a in sibling_allocs) or 1
+    pct_up = _ancestor_up_pct(this_alloc, total_new_all)
+    pct_us = (
+        this_alloc.override_pct_us
+        if this_alloc.override_pct_us is not None
+        else (this_alloc.total_students / total_students_all)
+    )
+    return pct_up, pct_us
+
+
 def _allocated_components_from_ancestor(
     db: Session,
     org: Organization,
@@ -73,24 +105,11 @@ def _allocated_components_from_ancestor(
     if not parent_pea:
         return [], [], 0.0, 0.0
 
-    sibling_allocs = crud_misc.list_allocations(db, ancestor.id)
-    total_students_all = sum(a.total_students for a in sibling_allocs) or 1
-    total_new_all = sum(a.new_students for a in sibling_allocs) or 1
-
-    this_alloc = next(
-        (a for a in sibling_allocs if a.from_organization_id == org.id),
-        None,
-    )
-    if this_alloc is None:
+    pcts = _ancestor_pcts(db, org, ancestor)
+    if pcts is None:
         # Org ini tidak terdaftar di ContributionAllocation ancestor — tidak ada alokasi
         return [], [], 0.0, 0.0
-
-    pct_up = _ancestor_up_pct(this_alloc, total_new_all)
-    pct_us = (
-        this_alloc.override_pct_us
-        if this_alloc.override_pct_us is not None
-        else (this_alloc.total_students / total_students_all)
-    )
+    pct_up, pct_us = pcts
 
     label_prefix = "[Alokasi Pusat]" if ancestor.org_type == OrgType.PUSAT else "[Alokasi Cabang]"
 
@@ -195,14 +214,10 @@ def _get_parent_allocated_dep(db: Session, org: Organization, ancestor_dep_fn) -
     while ancestor is not None:
         ancestor_dep = ancestor_dep_fn(ancestor)
         if ancestor_dep:
-            sibling_allocs = crud_misc.list_allocations(db, ancestor.id)
-            total_new_all = sum(a.new_students for a in sibling_allocs) or 1
-            this_alloc = next(
-                (a for a in sibling_allocs if a.from_organization_id == org.id),
-                None,
-            )
-            if this_alloc is not None:
-                allocated = _ancestor_up_pct(this_alloc, total_new_all) * ancestor_dep
+            pcts = _ancestor_pcts(db, org, ancestor)
+            if pcts is not None:
+                pct_up, _ = pcts
+                allocated = pct_up * ancestor_dep
                 if ancestor.org_type == OrgType.PUSAT:
                     pusat_dep += allocated
                 else:
@@ -235,6 +250,43 @@ def _get_parent_allocated_new_investment_dep(db: Session, org: Organization) -> 
         return sum(i.dep_current_year for i in investments)
 
     return _get_parent_allocated_dep(db, org, ancestor_dep)
+
+
+def _unit_setoran_to_ancestor(
+    db: Session, org: Organization, ancestor: Organization
+) -> tuple[float, float]:
+    """
+    Hitung setoran (kontribusi) unit ke satu ancestor (Cabang/Pusat) berbasis
+    alokasi:
+
+    - Setoran UP = beban UP induk yang dialokasikan ke unit + porsi UP unit ×
+      depresiasi tahun berjalan induk (investasi baru + aset lama).
+    - Setoran US = beban US induk yang dialokasikan ke unit.
+
+    Nilai ini identik dengan beban alokasi yang ditanggung unit di
+    :func:`simulate_expenses`, sehingga setoran unit (beban) = pendapatan
+    kontribusi induk dan konsolidasi nyambung 1:1.
+
+    Returns:
+        Tuple (setoran_up, setoran_us). (0.0, 0.0) bila unit tidak terdaftar
+        sebagai kontributor di ancestor.
+    """
+    pcts = _ancestor_pcts(db, org, ancestor)
+    if pcts is None:
+        return 0.0, 0.0
+    pct_up, _ = pcts
+
+    _, _, beban_up, beban_us = _allocated_components_from_ancestor(db, org, ancestor)
+
+    fiscal_year = _fiscal_year(settings.budget_year)
+    new_dep = sum(i.dep_current_year for i in crud_inv.list_by_org(db, ancestor.id))
+    old_dep = sum(
+        a.dep_current_year(fiscal_year) for a in crud_misc.list_dep_by_org(db, ancestor.id)
+    )
+
+    setoran_up = beban_up + pct_up * (new_dep + old_dep)
+    setoran_us = beban_us
+    return setoran_up, setoran_us
 
 
 def _aggregate_entries(entries) -> dict:
@@ -280,13 +332,18 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
     fiscal_year = _fiscal_year(settings.budget_year)
     old_assets = crud_misc.list_dep_by_org(db, org.id)
     old_asset_dep = sum(old.dep_current_year(fiscal_year) for old in old_assets)
-    # Depresiasi aset lama tahun ini di Cabang/Pusat dialokasikan ke unit,
-    # menambah beban (alokasi) UP unit — dipisahkan per jenis induk.
+    # Depresiasi tahun berjalan investasi baru & aset lama di Cabang/Pusat
+    # dialokasikan ke unit, menambah beban (alokasi) UP unit — dipisahkan per
+    # jenis induk.
+    cabang_allocated_new_investment_dep, pusat_allocated_new_investment_dep = (
+        _get_parent_allocated_new_investment_dep(db, org)
+    )
     cabang_allocated_old_asset_dep, pusat_allocated_old_asset_dep = (
         _get_parent_allocated_old_asset_dep(db, org)
     )
     total_dep = (
         new_investment_dep + old_asset_dep
+        + cabang_allocated_new_investment_dep + pusat_allocated_new_investment_dep
         + cabang_allocated_old_asset_dep + pusat_allocated_old_asset_dep
     )
     total_up_cost_with_dep = total_up_cost + total_dep
@@ -309,6 +366,8 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
         pusat_allocated_up_cost=pusat_allocated_up_cost,
         new_investment_dep=new_investment_dep,
         old_asset_dep=old_asset_dep,
+        cabang_allocated_new_investment_dep=cabang_allocated_new_investment_dep,
+        pusat_allocated_new_investment_dep=pusat_allocated_new_investment_dep,
         cabang_allocated_old_asset_dep=cabang_allocated_old_asset_dep,
         pusat_allocated_old_asset_dep=pusat_allocated_old_asset_dep,
         total_up_cost_with_dep=total_up_cost_with_dep,
@@ -462,35 +521,27 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
                 total_auto += data["total"]
 
     else:
-        # Untuk CABANG/PUSAT: pendapatan berasal dari kontribusi UP dan US
-        # setiap child UNIT, dihitung dari UP/US revenue aktual unit × tarif
-        # kontribusi unit tersebut (bukan dari pengeluaran CABANG sendiri).
+        # Untuk CABANG/PUSAT: pendapatan berasal dari setoran (alokasi) tiap
+        # child UNIT — porsi beban induk (UP+US) + depresiasi induk yang
+        # ditanggung unit. Setoran ini identik dengan beban alokasi di sisi unit
+        # (lihat simulate_expenses), sehingga buku unit & induk konsolidasi 1:1.
+        # Tidak bergantung pada tarif UP/US unit, jadi nilai final = auto.
         allocations = crud_misc.list_allocations(db, org.id)
-        up_rate_key = "up_to_cabang" if org.org_type == OrgType.CABANG else "up_to_pusat"
-        us_rate_key = "us_to_cabang" if org.org_type == OrgType.CABANG else "us_to_pusat"
 
         for alloc in allocations:
             from_org = alloc.from_organization
             if from_org is None or from_org.org_type != OrgType.UNIT:
                 continue
-            unit_rates = crud_misc.get_rates(db, from_org.id)
-            up_sim = simulate_up(db, from_org)
-            us_sim = simulate_us(db, from_org)
-            up_rate = unit_rates.get(up_rate_key, 0.0)
-            us_rate = unit_rates.get(us_rate_key, 0.0)
-            contribution_up = up_sim.total_up_revenue * up_rate
-            contribution_us = us_sim.total_us_revenue * us_rate
-            contribution_up_auto = up_sim.auto_up_revenue * up_rate
-            contribution_us_auto = us_sim.auto_us_revenue * us_rate
+            setoran_up, setoran_us = _unit_setoran_to_ancestor(db, from_org, org)
             name = from_org.name
-            if contribution_up:
-                items.append(IncomeItem(account_code="4630.01", description=f"Kontribusi UP dari {name}", total=contribution_up, auto_total=contribution_up_auto))
-                total += contribution_up
-                total_auto += contribution_up_auto
-            if contribution_us:
-                items.append(IncomeItem(account_code="4630.02", description=f"Kontribusi US dari {name}", total=contribution_us, auto_total=contribution_us_auto))
-                total += contribution_us
-                total_auto += contribution_us_auto
+            if setoran_up:
+                items.append(IncomeItem(account_code="4630.01", description=f"Kontribusi UP dari {name}", total=setoran_up, auto_total=setoran_up))
+                total += setoran_up
+                total_auto += setoran_up
+            if setoran_us:
+                items.append(IncomeItem(account_code="4630.02", description=f"Kontribusi US dari {name}", total=setoran_us, auto_total=setoran_us))
+                total += setoran_us
+                total_auto += setoran_us
 
         income_entries = crud_income.list_by_org(db, org.id)
         income_agg = defaultdict(lambda: {"total": 0.0, "code": "", "label": ""})
@@ -682,13 +733,43 @@ def simulate_depreciation(db: Session, org: Organization) -> DepreciationSummary
     return DepreciationSummary(items=items, total_current_year_dep=total_dep)
 
 
+def _allocatable_base(db: Session, org: Organization) -> tuple[float, float]:
+    """
+    Total biaya induk yang dialokasikan ke unit (basis kontribusi):
+
+    - UP: seluruh beban UP induk (PEA affects_up) + depresiasi tahun berjalan
+      induk (investasi baru + aset lama).
+    - US: seluruh beban US induk (PEA bukan affects_up).
+
+    Returns:
+        Tuple (base_up, base_us) — nilai 100% sebelum dibagi ke unit.
+    """
+    base_up = 0.0
+    base_us = 0.0
+    for pea in crud_pea.list_active_by_org(db, org.id):
+        entries = crud_entry.list_by_category(db, org.id, pea.expense_category_id)
+        total = sum((e.foundation or 0.0) + (e.bos or 0.0) for e in entries)
+        if pea.affects_up:
+            base_up += total
+        else:
+            base_us += total
+
+    fiscal_year = _fiscal_year(settings.budget_year)
+    base_up += sum(i.dep_current_year for i in crud_inv.list_by_org(db, org.id))
+    base_up += sum(
+        a.dep_current_year(fiscal_year) for a in crud_misc.list_dep_by_org(db, org.id)
+    )
+    return base_up, base_us
+
+
 def simulate_allocation(db: Session, org: Organization) -> AllocationSimulation:
     """
     Hitung alokasi kontribusi UP dan US dari setiap child UNIT ke org ini.
 
-    Kontribusi dihitung dari UP/US revenue aktual setiap unit dikalikan tarif
-    kontribusi unit tersebut (up_to_cabang/up_to_pusat dan us_to_cabang/us_to_pusat).
-    pct_up/pct_us menunjukkan proporsi revenue unit terhadap total pool.
+    Berbasis alokasi: setiap unit menyetor porsinya atas beban induk (UP+US)
+    ditambah depresiasi tahun berjalan induk (porsi UP). pct_up/pct_us adalah
+    proporsi siswa unit (new_students untuk UP, total_students untuk US) yang
+    menjadi dasar pembagian. Setoran ini = beban alokasi yang ditanggung unit.
 
     Args:
         db: Database session.
@@ -698,59 +779,35 @@ def simulate_allocation(db: Session, org: Organization) -> AllocationSimulation:
         AllocationSimulation dengan rincian kontribusi per unit.
     """
     allocations = crud_misc.list_allocations(db, org.id)
-    up_rate_key = "up_to_cabang" if org.org_type == OrgType.CABANG else "up_to_pusat"
-    us_rate_key = "us_to_cabang" if org.org_type == OrgType.CABANG else "us_to_pusat"
+    base_up, base_us = _allocatable_base(db, org)
 
-    # Pass 1: hitung revenue dan kontribusi per unit
-    unit_data = []
-    total_up_pool = 0.0
-    total_us_pool = 0.0
+    units = []
+    total_k_up = 0.0
+    total_k_us = 0.0
 
     for alloc in allocations:
         from_org = alloc.from_organization
         if from_org is None or from_org.org_type != OrgType.UNIT:
             continue
-        unit_rates = crud_misc.get_rates(db, from_org.id)
-        up_revenue = simulate_up(db, from_org).total_up_revenue
-        us_revenue = simulate_us(db, from_org).total_us_revenue
-        contribution_up = up_revenue * unit_rates.get(up_rate_key, 0.0)
-        contribution_us = us_revenue * unit_rates.get(us_rate_key, 0.0)
-        total_up_pool += up_revenue
-        total_us_pool += us_revenue
-        unit_data.append({
-            "alloc": alloc,
-            "from_org": from_org,
-            "up_revenue": up_revenue,
-            "us_revenue": us_revenue,
-            "contribution_up": contribution_up,
-            "contribution_us": contribution_us,
-        })
-
-    # Pass 2: hitung pct dan susun hasil
-    units = []
-    total_k_up = 0.0
-    total_k_us = 0.0
-
-    for u in unit_data:
-        alloc = u["alloc"]
-        pct_up = u["up_revenue"] / total_up_pool if total_up_pool > 0 else 0.0
-        pct_us = u["us_revenue"] / total_us_pool if total_us_pool > 0 else 0.0
-        total_k_up += u["contribution_up"]
-        total_k_us += u["contribution_us"]
+        pcts = _ancestor_pcts(db, from_org, org)
+        pct_up, pct_us = pcts if pcts is not None else (0.0, 0.0)
+        setoran_up, setoran_us = _unit_setoran_to_ancestor(db, from_org, org)
+        total_k_up += setoran_up
+        total_k_us += setoran_us
         units.append(UnitAllocationDetail(
             from_organization_id=alloc.from_organization_id,
-            from_organization_name=u["from_org"].name,
+            from_organization_name=from_org.name,
             total_students=alloc.total_students,
             new_students=alloc.new_students,
             pct_us=pct_us,
             pct_up=pct_up,
-            contribution_us=u["contribution_us"],
-            contribution_up=u["contribution_up"],
+            contribution_us=setoran_us,
+            contribution_up=setoran_up,
         ))
 
     return AllocationSimulation(
-        total_base_cost_us=total_us_pool,
-        total_base_cost_up=total_up_pool,
+        total_base_cost_us=base_us,
+        total_base_cost_up=base_up,
         units=units,
         total_contribution_us=total_k_us,
         total_contribution_up=total_k_up,

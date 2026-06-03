@@ -7,6 +7,19 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-06-03
+
+### Diubah
+- Tarif UP unit kini meng-cover **depresiasi tahun berjalan investasi baru**
+  Cabang/Pusat (alokasi proporsional siswa baru), sebelumnya hanya depresiasi
+  aset lama induk. Ditambahkan field `cabang/pusat_allocated_new_investment_dep`
+  pada simulasi UP.
+- Pendapatan kontribusi Cabang/Pusat kini **berbasis alokasi**, bukan persentase:
+  pendapatan induk = total setoran unit = porsi beban induk (UP+US) + depresiasi
+  tahun berjalan induk. Setoran ini identik dengan beban alokasi yang ditanggung
+  unit, sehingga buku unit & induk terkonsolidasi 1:1. Tarif kontribusi persen
+  (`up_to_cabang`, dst.) tidak lagi dipakai untuk menghitung pendapatan induk.
+
 ## [1.16.0] - 2026-06-03
 
 ### Diubah

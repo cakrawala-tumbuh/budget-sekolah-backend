@@ -55,3 +55,10 @@ class OrganizationCreated(OrganizationRead):
 
 class OrganizationReadWithChildren(OrganizationRead):
     children: list[OrganizationRead] = []
+
+
+class OrganizationPasswordReset(BaseModel):
+    """Schema untuk response POST /organizations/{org_id}/reset-password."""
+    org_id: int
+    username: str
+    new_password: str

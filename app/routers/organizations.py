@@ -2,23 +2,25 @@
 Router organisasi — CRUD untuk entitas Organization.
 
 Endpoint:
-  GET    /organizations              — daftar semua organisasi (login wajib)
-  POST   /organizations              — buat organisasi baru + user otomatis (admin only)
-  GET    /organizations/{org_id}     — detail organisasi + daftar anak langsung (login wajib)
-  PUT    /organizations/{org_id}     — update nama/kota/parent (admin only)
-  DELETE /organizations/{org_id}     — hapus organisasi (admin only)
+  GET    /organizations                          — daftar semua organisasi (login wajib)
+  POST   /organizations                          — buat organisasi baru + user otomatis (admin only)
+  GET    /organizations/{org_id}                 — detail organisasi + daftar anak langsung (login wajib)
+  PUT    /organizations/{org_id}                 — update nama/kota/parent (admin only)
+  DELETE /organizations/{org_id}                 — hapus organisasi (admin only)
+  POST   /organizations/{org_id}/reset-password  — reset password login organisasi (admin only)
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..auth import generate_random_password, get_current_user, require_admin
 from ..crud import organization as crud
-from ..crud.user import create_user
+from ..crud.user import create_user, get_by_org_id, update_password
 from ..database import get_db
 from ..models.user import UserRole
 from ..schemas.organization import (
     OrganizationCreate,
     OrganizationCreated,
+    OrganizationPasswordReset,
     OrganizationRead,
     OrganizationReadWithChildren,
     OrganizationUpdate,
@@ -131,3 +133,27 @@ def delete_organization(
 ):
     obj = _get_or_404(db, org_id)
     crud.delete(db, obj)
+
+
+@router.post("/{org_id}/reset-password", response_model=OrganizationPasswordReset)
+def reset_organization_password(
+    org_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    """
+    Reset password login organisasi (admin only).
+
+    Generate password baru secara acak dan simpan ke akun user organisasi.
+    Password baru dikembalikan sekali dalam response — simpan baik-baik.
+    """
+    _get_or_404(db, org_id)
+    user = get_by_org_id(db, org_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User login untuk organisasi ini tidak ditemukan",
+        )
+    new_password = generate_random_password()
+    update_password(db, user, new_password)
+    return OrganizationPasswordReset(org_id=org_id, username=user.username, new_password=new_password)

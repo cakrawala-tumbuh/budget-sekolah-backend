@@ -6,18 +6,25 @@ Endpoint:
   POST   /organizations                          — buat organisasi baru + user otomatis (admin only)
   GET    /organizations/{org_id}                 — detail organisasi + daftar anak langsung (login wajib)
   PUT    /organizations/{org_id}                 — update nama/kota/parent (admin only)
+  PUT    /organizations/{org_id}/cash-balance    — update saldo kas & setara kas (admin / org pemilik)
   DELETE /organizations/{org_id}                 — hapus organisasi (admin only)
   POST   /organizations/{org_id}/reset-password  — reset password login organisasi (admin only)
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..auth import generate_random_password, get_current_user, require_admin
+from ..auth import (
+    generate_random_password,
+    get_current_user,
+    get_org_access,
+    require_admin,
+)
 from ..crud import organization as crud
 from ..crud.user import create_user, get_by_org_id, update_password
 from ..database import get_db
 from ..models.user import UserRole
 from ..schemas.organization import (
+    OrganizationCashBalanceUpdate,
     OrganizationCreate,
     OrganizationCreated,
     OrganizationPasswordReset,
@@ -123,6 +130,25 @@ def update_organization(
 ):
     obj = _get_or_404(db, org_id)
     return crud.update(db, obj, data)
+
+
+@router.put("/{org_id}/cash-balance", response_model=OrganizationRead)
+def update_organization_cash_balance(
+    org_id: int,
+    data: OrganizationCashBalanceUpdate,
+    db: Session = Depends(get_db),
+    _=Depends(get_org_access),
+):
+    """
+    Update saldo kas & setara kas organisasi.
+
+    Tidak terbatas admin: user organisasi boleh memperbarui saldo kas
+    organisasinya sendiri maupun organisasi yang dinaunginya secara
+    berjenjang (akses divalidasi oleh `get_org_access`). Hanya field
+    `cash_balance` yang bisa diubah lewat endpoint ini.
+    """
+    obj = _get_or_404(db, org_id)
+    return crud.update(db, obj, OrganizationUpdate(cash_balance=data.cash_balance))
 
 
 @router.delete("/{org_id}", status_code=status.HTTP_204_NO_CONTENT)

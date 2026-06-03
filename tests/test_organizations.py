@@ -111,6 +111,67 @@ class TestCashBalance:
         assert resp.json()["cash_balance"] == 7_500_000.0
 
 
+class TestCashBalanceEndpoint:
+    """Endpoint khusus PUT /organizations/{id}/cash-balance untuk user non-admin."""
+
+    def _as_org(self, org_id):
+        def _override():
+            return User(
+                id=2000 + org_id, username=f"org{org_id}", hashed_password="",
+                role=UserRole.ORG, org_id=org_id, is_active=True,
+            )
+        app.dependency_overrides[get_current_user] = _override
+
+    def _build_tree(self, client):
+        pusat = client.post("/organizations", json={
+            "code": "PUSAT-CBE", "name": "Pusat", "org_type": "PUSAT",
+        }).json()
+        cabang = client.post("/organizations", json={
+            "code": "CABANG-CBE", "name": "Cabang", "org_type": "CABANG",
+            "parent_id": pusat["id"],
+        }).json()
+        unit = client.post("/organizations", json={
+            "code": "UNIT-CBE", "name": "Unit", "org_type": "UNIT",
+            "parent_id": cabang["id"],
+        }).json()
+        return pusat["id"], cabang["id"], unit["id"]
+
+    def test_admin_can_update_cash_balance(self, client):
+        org = _create_unit(client, code="SD-CBE-ADM").json()
+        resp = client.put(
+            f"/organizations/{org['id']}/cash-balance", json={"cash_balance": 3_000_000.0}
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["cash_balance"] == 3_000_000.0
+
+    def test_org_user_can_update_own_cash_balance(self, client):
+        _pusat_id, _cabang_id, unit_id = self._build_tree(client)
+        self._as_org(unit_id)
+        resp = client.put(
+            f"/organizations/{unit_id}/cash-balance", json={"cash_balance": 1_250_000.0}
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["cash_balance"] == 1_250_000.0
+
+    def test_parent_org_can_update_descendant_cash_balance(self, client):
+        _pusat_id, cabang_id, unit_id = self._build_tree(client)
+        self._as_org(cabang_id)
+        resp = client.put(
+            f"/organizations/{unit_id}/cash-balance", json={"cash_balance": 999_000.0}
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.json()["cash_balance"] == 999_000.0
+
+    def test_org_user_cannot_update_outside_subtree(self, client):
+        pusat_id, _cabang_id, unit_id = self._build_tree(client)
+        self._as_org(unit_id)
+        # UNIT tidak boleh mengubah saldo kas pusat di atasnya
+        resp = client.put(
+            f"/organizations/{pusat_id}/cash-balance", json={"cash_balance": 1.0}
+        )
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+
 class TestHierarchicalAccess:
     """Organisasi yang lebih tinggi bisa melihat semua naungannya, berjenjang."""
 

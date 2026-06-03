@@ -40,6 +40,11 @@ class OrganizationUpdate(BaseModel):
     parent_id: int | None = None
 
 
+class OrganizationCashBalanceUpdate(BaseModel):
+    """Schema untuk update saldo kas & setara kas saja (boleh oleh user org)."""
+    cash_balance: float
+
+
 class OrganizationRead(OrganizationBase):
     id: int
     created_at: datetime

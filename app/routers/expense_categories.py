@@ -12,15 +12,19 @@ Endpoint:
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..auth import require_admin
+from ..auth import get_current_user, require_admin
 from ..database import get_db
 from ..crud import expense_category as crud, income_category as income_crud
 from ..schemas.expense_category import ExpenseCategoryCreate, ExpenseCategoryUpdate, ExpenseCategoryRead
 
+# Read (GET) terbuka untuk semua user terautentikasi — kategori biaya adalah
+# data referensi yang dibutuhkan user organisasi (non-admin) untuk melihat dan
+# mengedit entri biaya operasional/non-operasional miliknya. Operasi tulis
+# (create/update/delete/seed) tetap khusus admin via require_admin per-endpoint.
 router = APIRouter(
     prefix="/expense-categories",
     tags=["Expense Categories"],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(get_current_user)],
 )
 
 
@@ -37,7 +41,12 @@ def get_category(category_id: int, db: Session = Depends(get_db)):
     return cat
 
 
-@router.post("", response_model=ExpenseCategoryRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ExpenseCategoryRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
+)
 def create_category(data: ExpenseCategoryCreate, db: Session = Depends(get_db)):
     existing = crud.get_by_code(db, data.code)
     if existing:
@@ -45,7 +54,11 @@ def create_category(data: ExpenseCategoryCreate, db: Session = Depends(get_db)):
     return crud.create(db, data)
 
 
-@router.put("/{category_id}", response_model=ExpenseCategoryRead)
+@router.put(
+    "/{category_id}",
+    response_model=ExpenseCategoryRead,
+    dependencies=[Depends(require_admin)],
+)
 def update_category(category_id: int, data: ExpenseCategoryUpdate, db: Session = Depends(get_db)):
     cat = crud.get(db, category_id)
     if cat is None:
@@ -53,7 +66,11 @@ def update_category(category_id: int, data: ExpenseCategoryUpdate, db: Session =
     return crud.update(db, cat, data)
 
 
-@router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{category_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
 def delete_category(category_id: int, db: Session = Depends(get_db)):
     cat = crud.get(db, category_id)
     if cat is None:
@@ -61,7 +78,11 @@ def delete_category(category_id: int, db: Session = Depends(get_db)):
     crud.delete(db, cat)
 
 
-@router.post("/seed-defaults", status_code=status.HTTP_200_OK)
+@router.post(
+    "/seed-defaults",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_admin)],
+)
 def seed_defaults(db: Session = Depends(get_db)):
     """Hapus semua kategori biaya lalu semai ulang default."""
     crud.delete_all(db)

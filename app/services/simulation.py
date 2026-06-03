@@ -170,30 +170,30 @@ def _get_parent_allocated_components(db: Session, org: Organization) -> _ParentA
     return result
 
 
-def _get_parent_allocated_old_asset_dep(db: Session, org: Organization) -> tuple[float, float]:
+def _get_parent_allocated_dep(db: Session, org: Organization, ancestor_dep_fn) -> tuple[float, float]:
     """
-    Hitung porsi depresiasi aset lama tahun berjalan dari organisasi induk
-    yang dialokasikan ke unit ini, dipisahkan antara Cabang dan Pusat.
+    Hitung porsi depresiasi tahun berjalan dari organisasi induk yang
+    dialokasikan ke unit ini, dipisahkan antara Cabang dan Pusat.
 
-    Depresiasi aset lama tahun ini di tiap ancestor didistribusikan ke unit
-    proporsional berdasarkan new_students (proporsi UP, override_pct_up bila
-    ada), lalu menambah beban UP unit.
+    Depresiasi tahun ini di tiap ancestor (dihitung oleh ``ancestor_dep_fn``)
+    didistribusikan ke unit proporsional berdasarkan new_students (proporsi UP,
+    override_pct_up bila ada).
 
     Args:
         db: Database session.
         org: Organisasi anak (UNIT) penerima alokasi.
+        ancestor_dep_fn: Fungsi (ancestor) -> total depresiasi tahun ini di
+            ancestor tersebut (mis. aset lama atau investasi baru).
 
     Returns:
-        Tuple (cabang_dep, pusat_dep) — depresiasi aset lama induk yang
-        dialokasikan ke unit ini dari Cabang dan dari Pusat.
+        Tuple (cabang_dep, pusat_dep) — depresiasi induk yang dialokasikan ke
+        unit ini dari Cabang dan dari Pusat.
     """
-    fiscal_year = _fiscal_year(settings.budget_year)
     cabang_dep = 0.0
     pusat_dep = 0.0
     ancestor = org.parent
     while ancestor is not None:
-        old_assets = crud_misc.list_dep_by_org(db, ancestor.id)
-        ancestor_dep = sum(a.dep_current_year(fiscal_year) for a in old_assets)
+        ancestor_dep = ancestor_dep_fn(ancestor)
         if ancestor_dep:
             sibling_allocs = crud_misc.list_allocations(db, ancestor.id)
             total_new_all = sum(a.new_students for a in sibling_allocs) or 1
@@ -209,6 +209,32 @@ def _get_parent_allocated_old_asset_dep(db: Session, org: Organization) -> tuple
                     cabang_dep += allocated
         ancestor = ancestor.parent
     return cabang_dep, pusat_dep
+
+
+def _get_parent_allocated_old_asset_dep(db: Session, org: Organization) -> tuple[float, float]:
+    """
+    Porsi depresiasi aset lama tahun berjalan induk yang dialokasikan ke unit,
+    dipisahkan Cabang vs Pusat. Lihat :func:`_get_parent_allocated_dep`.
+    """
+    fiscal_year = _fiscal_year(settings.budget_year)
+
+    def ancestor_dep(ancestor: Organization) -> float:
+        old_assets = crud_misc.list_dep_by_org(db, ancestor.id)
+        return sum(a.dep_current_year(fiscal_year) for a in old_assets)
+
+    return _get_parent_allocated_dep(db, org, ancestor_dep)
+
+
+def _get_parent_allocated_new_investment_dep(db: Session, org: Organization) -> tuple[float, float]:
+    """
+    Porsi depresiasi investasi baru tahun berjalan induk yang dialokasikan ke
+    unit, dipisahkan Cabang vs Pusat. Lihat :func:`_get_parent_allocated_dep`.
+    """
+    def ancestor_dep(ancestor: Organization) -> float:
+        investments = crud_inv.list_by_org(db, ancestor.id)
+        return sum(i.dep_current_year for i in investments)
+
+    return _get_parent_allocated_dep(db, org, ancestor_dep)
 
 
 def _aggregate_entries(entries) -> dict:
@@ -567,6 +593,46 @@ def simulate_expenses(db: Session, org: Organization) -> ExpenseSimulation:
         else:
             non_operational.append(item)
             total_non_op += data["total"]
+
+    # Untuk UNIT: beban yang dialokasikan dari induk (Cabang & Pusat) menjadi
+    # penambah beban operasional unit:
+    #   1. Seluruh beban Cabang & Pusat yang dialokasikan ke unit (UP & US).
+    #   2. Depresiasi investasi baru tahun berjalan Cabang & Pusat (alokasi).
+    #   3. Depresiasi aset lama tahun berjalan Cabang & Pusat (alokasi).
+    if org.org_type == OrgType.UNIT:
+        parent_alloc = _get_parent_allocated_components(db, org)
+        for comp in (
+            parent_alloc.up_cabang + parent_alloc.up_pusat
+            + parent_alloc.us_cabang + parent_alloc.us_pusat
+        ):
+            operational.append(ExpenseAccountSummary(
+                account_code=comp.account_code,
+                description=comp.description,
+                total_yayasan=comp.total,
+                total_bos=0.0,
+                total=comp.total,
+            ))
+            total_op += comp.total
+
+        new_dep_cabang, new_dep_pusat = _get_parent_allocated_new_investment_dep(db, org)
+        old_dep_cabang, old_dep_pusat = _get_parent_allocated_old_asset_dep(db, org)
+        dep_lines = [
+            ("ALLOC:DEP-INV-CBG", "[Alokasi Cabang] Depresiasi investasi baru", new_dep_cabang),
+            ("ALLOC:DEP-INV-PST", "[Alokasi Pusat] Depresiasi investasi baru", new_dep_pusat),
+            ("ALLOC:DEP-OLD-CBG", "[Alokasi Cabang] Depresiasi aset lama", old_dep_cabang),
+            ("ALLOC:DEP-OLD-PST", "[Alokasi Pusat] Depresiasi aset lama", old_dep_pusat),
+        ]
+        for code, desc, amount in dep_lines:
+            if not amount:
+                continue
+            operational.append(ExpenseAccountSummary(
+                account_code=code,
+                description=desc,
+                total_yayasan=amount,
+                total_bos=0.0,
+                total=amount,
+            ))
+            total_op += amount
 
     return ExpenseSimulation(
         operational=operational,

@@ -158,6 +158,99 @@ class TestExpenseSimulation:
         assert abs(data["total"] - (data["total_operational"] + data["total_non_operational"])) < 0.01
 
 
+class TestUnitExpenseParentAllocation:
+    """
+    Beban Cabang/Pusat yang dialokasikan ke unit + depresiasi induk (investasi
+    baru & aset lama) menjadi penambah beban operasional unit.
+    """
+
+    def _setup(self, client, suffix: str):
+        pusat = client.post("/organizations", json={
+            "code": f"PST-XP-{suffix}", "name": f"Pusat {suffix}", "org_type": "PUSAT",
+        }).json()["id"]
+        cabang = client.post("/organizations", json={
+            "code": f"CBG-XP-{suffix}", "name": f"Cabang {suffix}",
+            "org_type": "CABANG", "parent_id": pusat,
+        }).json()["id"]
+        unit = client.post("/organizations", json={
+            "code": f"SD-XP-{suffix}", "name": f"SD {suffix}",
+            "org_type": "UNIT", "parent_id": cabang,
+        }).json()["id"]
+        client.put(f"/organizations/{unit}/assumption", json={
+            "grade_1": 60, "grade_2": 0, "grade_3": 0, "grade_4": 0,
+            "grade_5": 0, "grade_6": 0,
+            "new_student_count": 60, "returning_student_count": 0, "staff_count": 5,
+        })
+
+        cat_dev = _expense_cat_id(client, "5130.01")   # UP component
+        cat_gaji = _expense_cat_id(client, "5110.01")  # US component
+        # Biaya di Cabang: dev 24jt (UP), gaji 120jt (US)
+        client.post(f"/organizations/{cabang}/budget-entries", json={
+            "expense_category_id": cat_dev, "line_number": 1,
+            "description": "Dev Cabang", "foundation": 24_000_000.0, "bos": 0.0,
+        })
+        client.post(f"/organizations/{cabang}/budget-entries", json={
+            "expense_category_id": cat_gaji, "line_number": 1,
+            "description": "Gaji Cabang", "foundation": 120_000_000.0, "bos": 0.0,
+        })
+        # Biaya di Pusat: dev 30jt (UP), gaji 90jt (US)
+        client.post(f"/organizations/{pusat}/budget-entries", json={
+            "expense_category_id": cat_dev, "line_number": 1,
+            "description": "Dev Pusat", "foundation": 30_000_000.0, "bos": 0.0,
+        })
+        client.post(f"/organizations/{pusat}/budget-entries", json={
+            "expense_category_id": cat_gaji, "line_number": 1,
+            "description": "Gaji Pusat", "foundation": 90_000_000.0, "bos": 0.0,
+        })
+        for parent in (cabang, pusat):
+            client.post(f"/organizations/{parent}/parent-expense-allocations",
+                        json={"expense_category_id": cat_dev, "affects_up": True})
+            client.post(f"/organizations/{parent}/parent-expense-allocations",
+                        json={"expense_category_id": cat_gaji, "affects_up": False})
+            client.put(f"/organizations/{parent}/contribution-allocations", json={
+                "from_organization_id": unit, "total_students": 200, "new_students": 60,
+            })
+        return pusat, cabang, unit
+
+    def test_allocated_parent_expenses_add_to_unit_expense(self, client):
+        _, _, unit = self._setup(client, "A")
+        data = client.get(f"/organizations/{unit}/simulation/expenses").json()
+        descs = [r["description"] for r in data["operational"]]
+        # Empat komponen alokasi: dev & gaji dari Cabang & Pusat
+        assert sum(1 for d in descs if d.startswith("[Alokasi Cabang]")) >= 2
+        assert sum(1 for d in descs if d.startswith("[Alokasi Pusat]")) >= 2
+        alloc_total = sum(
+            r["total"] for r in data["operational"]
+            if r["description"].startswith("[Alokasi")
+        )
+        # 24jt + 120jt + 30jt + 90jt = 264jt
+        assert abs(alloc_total - 264_000_000.0) < 1.0
+
+    def test_parent_depreciation_adds_to_unit_expense(self, client):
+        _, cabang, unit = self._setup(client, "B")
+        # Aset lama Cabang: 12jt / 4 -> 3jt/th
+        client.post(f"/organizations/{cabang}/depreciation", json={
+            "asset_name": "Aset Lama Cabang", "acquisition_cost": 12_000_000.0,
+            "useful_life": 4, "acquisition_year": 2024,
+        })
+        # Investasi baru Cabang: 24jt / 4, mulai bulan 1 -> 6jt th ini
+        inv_cat_id = _invest_cat_id(client, "1330.02")
+        client.post(f"/organizations/{cabang}/investments", json={
+            "investment_category_id": inv_cat_id, "asset_name": "Laptop Cabang",
+            "purchase_price": 24_000_000.0, "useful_life": 4, "start_month": 1,
+        })
+        data = client.get(f"/organizations/{unit}/simulation/expenses").json()
+        by_code = {r["account_code"]: r["total"] for r in data["operational"]}
+        assert abs(by_code.get("ALLOC:DEP-OLD-CBG", 0.0) - 3_000_000.0) < 1.0
+        assert abs(by_code.get("ALLOC:DEP-INV-CBG", 0.0) - 6_000_000.0) < 1.0
+
+    def test_unit_without_parent_has_no_allocation_lines(self, client):
+        org_id = _setup_unit(client, "SD-XP-STANDALONE")
+        data = client.get(f"/organizations/{org_id}/simulation/expenses").json()
+        descs = [r["description"] for r in data["operational"]]
+        assert not any(d.startswith("[Alokasi") for d in descs)
+
+
 class TestDepreciationSimulation:
     def test_depreciation_new_and_old(self, client):
         org_id = _setup_unit(client, "SD-SIM-DEP")

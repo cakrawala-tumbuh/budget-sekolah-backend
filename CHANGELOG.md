@@ -7,6 +7,17 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-06-03
+
+### Diubah
+- Simulasi biaya unit kini memasukkan beban yang dialokasikan dari induk sebagai
+  penambah beban operasional unit:
+  - seluruh beban Cabang & Pusat yang dialokasikan ke unit (komponen UP & US),
+  - depresiasi investasi baru tahun berjalan Cabang & Pusat (alokasi
+    proporsional new_students), dan
+  - depresiasi aset lama tahun berjalan Cabang & Pusat (alokasi proporsional
+    new_students).
+
 ## [1.15.1] - 2026-06-03
 
 ### Diperbaiki

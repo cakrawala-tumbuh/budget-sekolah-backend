@@ -1,0 +1,22 @@
+# Image khusus untuk automated test (lint + unit) budget-backend-ypii.
+#
+# Source di-COPY ke dalam image (BUKAN bind-mount). Konsekuensinya:
+#  - Test berjalan terisolasi; hasil sama di lokal maupun CI.
+#  - Artefak test (__pycache__, .pytest_cache, .ruff_cache) hidup di dalam
+#    container dan ikut terhapus saat `docker run --rm`. Folder project bersih.
+#
+# Pin versi base image untuk menjamin parity lokal vs CI.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Install dependency aplikasi + dependency test lebih dulu (layer cache).
+COPY requirements.txt requirements-test.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir -r requirements-test.txt
+
+# Copy seluruh source (pengecualian diatur di .dockerignore).
+COPY . .

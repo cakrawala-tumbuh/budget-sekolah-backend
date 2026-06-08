@@ -1,24 +1,19 @@
-name: Unit Test
+# CI HANYA memanggil `make test` — gate yang persis sama dengan lokal.
+# Logika lint + unit ada di Makefile + Dockerfile.test, tidak diduplikasi
+# di sini, sehingga lokal dan CI dijamin identik.
+name: Automated Test
 
 on:
   push:
-    branches:
-      - master
+    branches: [ master ]
   pull_request:
-    branches:
-      - master
 
 jobs:
   test:
-    name: pytest via Docker
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout kode
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build Docker image (stage test)
-        run: docker build --target test -t budget-backend-ypii:test .
-
-      - name: Jalankan semua unit test
-        run: docker run --rm budget-backend-ypii:test
+      - name: Automated test (lint + unit) di Docker
+        run: make test

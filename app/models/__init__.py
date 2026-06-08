@@ -14,6 +14,7 @@ from .contribution_allocation import ContributionAllocation
 from .parent_expense_allocation import ParentExpenseAllocation
 from .subsidy import Subsidy
 from .user import User
+from .direct_income_override import DirectIncomeOverride
 
 __all__ = [
     "Organization",
@@ -33,4 +34,5 @@ __all__ = [
     "ParentExpenseAllocation",
     "Subsidy",
     "User",
+    "DirectIncomeOverride",
 ]

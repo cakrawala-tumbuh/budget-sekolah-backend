@@ -68,3 +68,6 @@ class ExpenseCategory(Base):
     budget_entries: Mapped[list["BudgetEntry"]] = relationship(  # noqa: F821
         "BudgetEntry", back_populates="expense_category"
     )
+    direct_income_overrides: Mapped[list["DirectIncomeOverride"]] = relationship(  # noqa: F821
+        "DirectIncomeOverride", back_populates="expense_category"
+    )

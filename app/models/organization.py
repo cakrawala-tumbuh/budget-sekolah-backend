@@ -80,3 +80,6 @@ class Organization(Base):
         foreign_keys="ParentExpenseAllocation.parent_org_id",
         back_populates="parent_org",
     )
+    direct_income_overrides: Mapped[list["DirectIncomeOverride"]] = relationship(  # noqa: F821
+        "DirectIncomeOverride", back_populates="organization"
+    )

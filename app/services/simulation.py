@@ -11,6 +11,7 @@ from ..crud import budget_entry as crud_entry, assumption as crud_assumption
 from ..crud import investment as crud_inv, misc as crud_misc, income_entry as crud_income
 from ..crud import parent_expense_allocation as crud_pea
 from ..crud import subsidy as crud_subsidy
+from ..crud import direct_income_override as crud_dio
 from ..models.organization import Organization, OrgType
 from ..models.income_category import IncomeCalcMethod
 from ..schemas.simulation import (
@@ -474,12 +475,17 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
         entries = crud_entry.list_by_org(db, org.id)
         agg = _aggregate_entries(entries)
 
+        overrides_map = {
+            o.expense_category_id: o
+            for o in crud_dio.list_by_org(db, org.id)
+        }
+
         for cid, data in sorted(agg.items()):
             cat = data["category"]
             if cat is None or not cat.is_direct_income:
                 continue
-            amount = data["total_yayasan"]  # BoS sudah dihitung di Pendapatan BoS
-            if not amount:
+            auto_amount = data["total_yayasan"]  # BoS sudah dihitung di Pendapatan BoS
+            if not auto_amount:
                 continue
             income_cat = cat.maps_to_income_category
             income_code = income_cat.code if income_cat else cat.code
@@ -489,10 +495,17 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
                     for e in entries if e.expense_category_id == cid
                     for ga in e.grade_allocations
                 )
-                amount = grade_total if grade_total else amount
-            items.append(IncomeItem(account_code=income_code, description=income_cat.label if income_cat else cat.label, total=amount, auto_total=amount))
-            total += amount
-            total_auto += amount
+                auto_amount = grade_total if grade_total else auto_amount
+            override = overrides_map.get(cid)
+            final_amount = override.override_amount if override is not None else auto_amount
+            items.append(IncomeItem(
+                account_code=income_code,
+                description=income_cat.label if income_cat else cat.label,
+                total=final_amount,
+                auto_total=auto_amount,
+            ))
+            total += final_amount
+            total_auto += auto_amount
 
         # SUM_FROM_BOS: jumlahkan kolom bos dari seluruh BudgetEntry + Investment
         from ..crud import income_category as crud_income_cat
@@ -900,20 +913,27 @@ def simulate_direct_income(db: Session, org: Organization) -> DirectIncomeSimula
 
     Returns:
         DirectIncomeSimulation berisi satu baris per expense category
-        yang ber-flag is_direct_income, dengan breakdown yayasan, bos, dan total.
+        yang ber-flag is_direct_income, dengan nilai otomatis dan nilai final
+        (override jika ada, otomatis jika tidak).
     """
     entries = crud_entry.list_by_org(db, org.id)
     agg = _aggregate_entries(entries)
 
+    overrides_map = {
+        o.expense_category_id: o
+        for o in crud_dio.list_by_org(db, org.id)
+    }
+
     items = []
     total = 0.0
+    total_auto = 0.0
 
     for cid, data in sorted(agg.items()):
         cat = data["category"]
         if cat is None or not cat.is_direct_income:
             continue
-        amount = data["total_yayasan"]  # BoS sudah dihitung di Pendapatan BoS
-        if not amount:
+        auto_amount = data["total_yayasan"]  # BoS sudah dihitung di Pendapatan BoS
+        if not auto_amount:
             continue
         income_cat = cat.maps_to_income_category
         income_code = income_cat.code if income_cat else "–"
@@ -925,17 +945,23 @@ def simulate_direct_income(db: Session, org: Organization) -> DirectIncomeSimula
                 for ga in e.grade_allocations
             )
             if grade_total:
-                amount = grade_total
+                auto_amount = grade_total
+        override = overrides_map.get(cid)
+        final_amount = override.override_amount if override is not None else auto_amount
         items.append(DirectIncomeItem(
+            expense_category_id=cid,
             expense_code=cat.code,
             expense_label=cat.label,
             income_code=income_code,
             income_label=income_label,
-            total=amount,
+            auto_total=auto_amount,
+            total=final_amount,
+            is_overridden=override is not None,
         ))
-        total += amount
+        total += final_amount
+        total_auto += auto_amount
 
-    return DirectIncomeSimulation(items=items, total=total)
+    return DirectIncomeSimulation(items=items, total=total, total_auto=total_auto)
 
 
 def simulate_summary(db: Session, org: Organization) -> BudgetSummary:

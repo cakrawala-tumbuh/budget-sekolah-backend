@@ -12,6 +12,7 @@ from .contributions import router as contributions_router
 from .parent_expense_allocations import router as parent_expense_allocations_router
 from .subsidies import router as subsidies_router
 from .simulation import router as simulation_router
+from .direct_income_overrides import router as direct_income_overrides_router
 from .auth import router as auth_router
 from .users import router as users_router
 from .database import router as database_router
@@ -31,6 +32,7 @@ __all__ = [
     "parent_expense_allocations_router",
     "subsidies_router",
     "simulation_router",
+    "direct_income_overrides_router",
     "auth_router",
     "users_router",
     "database_router",

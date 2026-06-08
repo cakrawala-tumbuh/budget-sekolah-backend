@@ -159,16 +159,20 @@ class BosIncomeSimulation(BaseModel):
 # ── Direct Income Mapping ─────────────────────────────────────────────────────
 
 class DirectIncomeItem(BaseModel):
+    expense_category_id: int
     expense_code: str
     expense_label: str
     income_code: str
     income_label: str
-    total: float
+    auto_total: float      # nilai otomatis dari budget entry
+    total: float           # final: override jika ada, else auto_total
+    is_overridden: bool
 
 
 class DirectIncomeSimulation(BaseModel):
     items: list[DirectIncomeItem]
     total: float
+    total_auto: float
 
 
 # ── Full Summary ──────────────────────────────────────────────────────────────

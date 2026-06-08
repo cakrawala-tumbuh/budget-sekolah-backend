@@ -7,6 +7,32 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-06-08
+
+### Ditambahkan
+- Model `DirectIncomeOverride` (`app/models/direct_income_override.py`): tabel
+  `direct_income_overrides` menyimpan override nilai direct income per organisasi
+  per expense category, dengan unique constraint `(organization_id, expense_category_id)`.
+- CRUD `app/crud/direct_income_override.py`: fungsi `list_by_org`, `get_by_org_and_expense`,
+  `upsert`, dan `delete`.
+- Schema `DirectIncomeOverrideUpsert` dan `DirectIncomeOverrideRead`
+  di `app/schemas/direct_income_override.py`.
+- Router `app/routers/direct_income_overrides.py` dengan tiga endpoint:
+  `GET /organizations/{org_id}/direct-income-overrides`,
+  `PUT /organizations/{org_id}/direct-income-overrides/{expense_category_id}` (upsert),
+  `DELETE /organizations/{org_id}/direct-income-overrides/{expense_category_id}` (reset ke otomatis).
+
+### Diubah
+- `simulate_direct_income()` dan `simulate_income()` di `app/services/simulation.py`:
+  memeriksa tabel override sebelum menggunakan nilai otomatis dari budget entry.
+  Bila override ada, nilai tersebut yang dipakai; bila tidak ada, tetap menggunakan
+  nilai otomatis (tanpa memecah backward compatibility).
+- `DirectIncomeItem` di `app/schemas/simulation.py`: tambah field `expense_category_id`,
+  `auto_total`, dan `is_overridden`.
+- `DirectIncomeSimulation` di `app/schemas/simulation.py`: tambah field `total_auto`.
+- Relationship `direct_income_overrides` ditambahkan ke model `Organization` dan
+  `ExpenseCategory`.
+
 ## [1.20.0] - 2026-06-08
 
 ### Ditambahkan

@@ -156,6 +156,21 @@ class BosIncomeSimulation(BaseModel):
     total: float
 
 
+# ── Direct Income Mapping ─────────────────────────────────────────────────────
+
+class DirectIncomeItem(BaseModel):
+    expense_code: str
+    expense_label: str
+    income_code: str
+    income_label: str
+    total: float
+
+
+class DirectIncomeSimulation(BaseModel):
+    items: list[DirectIncomeItem]
+    total: float
+
+
 # ── Full Summary ──────────────────────────────────────────────────────────────
 
 class BudgetSummary(BaseModel):

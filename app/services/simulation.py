@@ -21,6 +21,7 @@ from ..schemas.simulation import (
     UnitAllocationDetail, AllocationSimulation,
     DepreciationItem, DepreciationSummary,
     BosIncomeLineItem, BosIncomeSimulation,
+    DirectIncomeItem, DirectIncomeSimulation,
     BudgetSummary,
 )
 
@@ -477,7 +478,7 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
             cat = data["category"]
             if cat is None or not cat.is_direct_income:
                 continue
-            amount = data["total_yayasan"] + data["total_bos"]
+            amount = data["total_yayasan"]  # BoS sudah dihitung di Pendapatan BoS
             if not amount:
                 continue
             income_cat = cat.maps_to_income_category
@@ -888,6 +889,53 @@ def simulate_bos_income(db: Session, org: Organization) -> BosIncomeSimulation:
         total_from_investments=total_from_investments,
         total=total_from_expenses + total_from_investments,
     )
+
+
+def simulate_direct_income(db: Session, org: Organization) -> DirectIncomeSimulation:
+    """Rincian biaya bertipe Direct Income beserta kategori pendapatan tujuannya.
+
+    Args:
+        db: Database session.
+        org: Organization instance (harus UNIT).
+
+    Returns:
+        DirectIncomeSimulation berisi satu baris per expense category
+        yang ber-flag is_direct_income, dengan breakdown yayasan, bos, dan total.
+    """
+    entries = crud_entry.list_by_org(db, org.id)
+    agg = _aggregate_entries(entries)
+
+    items = []
+    total = 0.0
+
+    for cid, data in sorted(agg.items()):
+        cat = data["category"]
+        if cat is None or not cat.is_direct_income:
+            continue
+        amount = data["total_yayasan"]  # BoS sudah dihitung di Pendapatan BoS
+        if not amount:
+            continue
+        income_cat = cat.maps_to_income_category
+        income_code = income_cat.code if income_cat else "–"
+        income_label = income_cat.label if income_cat else "–"
+        if income_cat and income_cat.calc_method == IncomeCalcMethod.GRADE_BASED:
+            grade_total = sum(
+                ga.amount
+                for e in entries if e.expense_category_id == cid
+                for ga in e.grade_allocations
+            )
+            if grade_total:
+                amount = grade_total
+        items.append(DirectIncomeItem(
+            expense_code=cat.code,
+            expense_label=cat.label,
+            income_code=income_code,
+            income_label=income_label,
+            total=amount,
+        ))
+        total += amount
+
+    return DirectIncomeSimulation(items=items, total=total)
 
 
 def simulate_summary(db: Session, org: Organization) -> BudgetSummary:

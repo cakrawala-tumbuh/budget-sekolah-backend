@@ -7,6 +7,16 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-06-08
+
+### Ditambahkan
+- Schema `DirectIncomeItem` dan `DirectIncomeSimulation` di `app/schemas/simulation.py`.
+- Fungsi `simulate_direct_income()` di `app/services/simulation.py`: menghasilkan
+  rincian per expense category yang ber-flag Direct Income beserta kategori pendapatan
+  tujuannya. Hanya mengakumulasi nilai Yayasan — BoS tidak ikut karena sudah
+  diperhitungkan di endpoint `bos-income`.
+- Endpoint `GET /organizations/{org_id}/simulation/direct-income` (khusus UNIT).
+
 ## [1.19.0] - 2026-06-08
 
 ### Ditambahkan

@@ -8,7 +8,8 @@ from ..models.organization import OrgType
 from ..services import simulation as svc
 from ..schemas.simulation import (
     UPSimulation, USSimulation, IncomeSimulation, ExpenseSimulation,
-    AllocationSimulation, DepreciationSummary, BosIncomeSimulation, BudgetSummary,
+    AllocationSimulation, DepreciationSummary, BosIncomeSimulation,
+    DirectIncomeSimulation, BudgetSummary,
 )
 
 router = APIRouter(
@@ -85,6 +86,18 @@ def sim_bos_income(org_id: int, db: Session = Depends(get_db)):
     if org.org_type != OrgType.UNIT:
         raise HTTPException(status_code=422, detail="BoS income simulation is only for UNIT organizations")
     return svc.simulate_bos_income(db, org)
+
+
+@router.get(
+    "/direct-income",
+    response_model=DirectIncomeSimulation,
+    summary="Direct income mapping breakdown from expense categories",
+)
+def sim_direct_income(org_id: int, db: Session = Depends(get_db)):
+    org = _get_org_or_404(db, org_id)
+    if org.org_type != OrgType.UNIT:
+        raise HTTPException(status_code=422, detail="Direct income simulation is only for UNIT organizations")
+    return svc.simulate_direct_income(db, org)
 
 
 @router.get("/summary", response_model=BudgetSummary, summary="Full RAB budget summary")

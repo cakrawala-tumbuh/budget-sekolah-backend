@@ -492,14 +492,18 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
             total += amount
             total_auto += amount
 
-        # SUM_FROM_BOS: jumlahkan kolom bos dari seluruh BudgetEntry
+        # SUM_FROM_BOS: jumlahkan kolom bos dari seluruh BudgetEntry + Investment
         from ..crud import income_category as crud_income_cat
         bos_categories = [
             c for c in crud_income_cat.list_all(db)
             if c.calc_method == IncomeCalcMethod.SUM_FROM_BOS
         ]
         if bos_categories:
-            total_bos = sum(e.bos or 0.0 for e in entries)
+            bos_investments = crud_inv.list_by_org(db, org.id)
+            total_bos = (
+                sum(e.bos or 0.0 for e in entries)
+                + sum(i.bos or 0.0 for i in bos_investments)
+            )
             if total_bos:
                 for bos_cat in bos_categories:
                     items.append(IncomeItem(account_code=bos_cat.code, description=bos_cat.label, total=total_bos, auto_total=total_bos))

@@ -15,6 +15,7 @@ class InvestmentBase(BaseModel):
     asset_code: str | None = None
     asset_name: str
     purchase_price: float
+    bos: float = 0.0
     useful_life: int
     start_month: int
 
@@ -49,6 +50,7 @@ class InvestmentUpdate(BaseModel):
     asset_code: str | None = None
     asset_name: str | None = None
     purchase_price: float | None = None
+    bos: float | None = None
     useful_life: int | None = None
     start_month: int | None = None
 

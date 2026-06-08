@@ -7,6 +7,16 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-06-08
+
+### Ditambahkan
+- Kolom **Dana BoS** pada entri investasi aset tetap. Nilai BoS otomatis
+  dimasukkan ke total Pendapatan BoS pada simulasi pendapatan (konsisten
+  dengan pola biaya operasional/non-operasional). Beban akrual (depresiasi)
+  tetap dihitung dari harga perolehan penuh.
+- Migrasi ringan `ALTER TABLE investments ADD COLUMN bos` agar database lama
+  kompatibel tanpa perlu reset.
+
 ## [1.17.0] - 2026-06-03
 
 ### Diubah
@@ -128,7 +138,9 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 ### Ditambahkan
 - Rilis pertama Budget Backend YPII.
 
-[Unreleased]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.15.1...HEAD
+[Unreleased]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.18.0...HEAD
+[1.18.0]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.17.0...v1.18.0
+[1.17.0]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.15.1...v1.17.0
 [1.15.1]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.15.0...v1.15.1
 [1.15.0]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.13.0...v1.14.0

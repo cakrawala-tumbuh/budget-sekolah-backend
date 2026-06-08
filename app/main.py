@@ -58,6 +58,14 @@ def _run_lightweight_migrations() -> None:
                 "ADD COLUMN cash_balance FLOAT NOT NULL DEFAULT 0.0"
             ))
         print("[startup] Migrated: added organizations.cash_balance")
+    if "investments" in inspector.get_table_names():
+        inv_columns = {col["name"] for col in inspector.get_columns("investments")}
+        if "bos" not in inv_columns:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE investments ADD COLUMN bos FLOAT NOT NULL DEFAULT 0.0"
+                ))
+            print("[startup] Migrated: added investments.bos")
 
 
 @asynccontextmanager

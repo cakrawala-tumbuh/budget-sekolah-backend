@@ -36,6 +36,8 @@ class Investment(Base):
     asset_code: Mapped[str | None] = mapped_column(String(50))
     asset_name: Mapped[str] = mapped_column(String(300), nullable=False)
     purchase_price: Mapped[float] = mapped_column(Float, nullable=False)
+    # Kolom E — porsi dana BOS/BOP/PBOS dari harga perolehan (UNIT only)
+    bos: Mapped[float] = mapped_column(Float, default=0.0)
     useful_life: Mapped[int] = mapped_column(Integer, nullable=False)   # years
     start_month: Mapped[int] = mapped_column(Integer, nullable=False)   # 1–12
 

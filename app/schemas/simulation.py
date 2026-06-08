@@ -140,6 +140,22 @@ class DepreciationSummary(BaseModel):
     total_current_year_dep: float
 
 
+# ── BoS Income Detail ─────────────────────────────────────────────────────────
+
+class BosIncomeLineItem(BaseModel):
+    code: str
+    description: str
+    amount: float
+    source: str                     # "expense" | "investment"
+
+
+class BosIncomeSimulation(BaseModel):
+    items: list[BosIncomeLineItem]
+    total_from_expenses: float
+    total_from_investments: float
+    total: float
+
+
 # ── Full Summary ──────────────────────────────────────────────────────────────
 
 class BudgetSummary(BaseModel):

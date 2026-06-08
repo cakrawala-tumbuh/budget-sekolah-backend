@@ -7,6 +7,16 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-06-08
+
+### Ditambahkan
+- Endpoint `GET /organizations/{org_id}/simulation/bos-income` untuk simulasi
+  detail pendapatan BoS (khusus UNIT): merinci kolom Dana BoS per kategori biaya
+  operasional dan per kategori investasi, lengkap dengan subtotal per seksi dan
+  total keseluruhan.
+- Schema `BosIncomeLineItem` dan `BosIncomeSimulation` di `app/schemas/simulation.py`.
+- Fungsi `simulate_bos_income()` di `app/services/simulation.py`.
+
 ## [1.18.0] - 2026-06-08
 
 ### Ditambahkan

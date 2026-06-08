@@ -20,6 +20,7 @@ from ..schemas.simulation import (
     ExpenseAccountSummary, ExpenseSimulation,
     UnitAllocationDetail, AllocationSimulation,
     DepreciationItem, DepreciationSummary,
+    BosIncomeLineItem, BosIncomeSimulation,
     BudgetSummary,
 )
 
@@ -816,6 +817,76 @@ def simulate_allocation(db: Session, org: Organization) -> AllocationSimulation:
         total_contribution_us=total_k_us,
         total_contribution_up=total_k_up,
         is_valid=True,
+    )
+
+
+def simulate_bos_income(db: Session, org: Organization) -> BosIncomeSimulation:
+    """
+    Hitung detail pendapatan BoS (Bantuan Operasional Sekolah) untuk unit.
+
+    Merangkum kolom ``bos`` dari seluruh BudgetEntry (per kategori biaya) dan
+    seluruh Investment (per kategori investasi), menampilkan kontribusi BoS
+    tiap komponen secara terpisah.
+
+    Args:
+        db: Database session.
+        org: Organisasi UNIT yang disimulasikan.
+
+    Returns:
+        BosIncomeSimulation dengan rincian sumber BoS dan total.
+    """
+    entries = crud_entry.list_by_org(db, org.id)
+    investments = crud_inv.list_by_org(db, org.id)
+
+    items: list[BosIncomeLineItem] = []
+    total_from_expenses = 0.0
+    total_from_investments = 0.0
+
+    # Kelompokkan entri anggaran berdasarkan kategori biaya
+    exp_agg: dict = defaultdict(lambda: {"total_bos": 0.0, "category": None})
+    for e in entries:
+        cid = e.expense_category_id
+        exp_agg[cid]["total_bos"] += e.bos or 0.0
+        if exp_agg[cid]["category"] is None and e.expense_category is not None:
+            exp_agg[cid]["category"] = e.expense_category
+
+    for cid, data in sorted(exp_agg.items()):
+        if not data["total_bos"]:
+            continue
+        cat = data["category"]
+        items.append(BosIncomeLineItem(
+            code=cat.code if cat else str(cid),
+            description=cat.label if cat else "Biaya Operasional",
+            amount=data["total_bos"],
+            source="expense",
+        ))
+        total_from_expenses += data["total_bos"]
+
+    # Kelompokkan investasi berdasarkan kategori investasi
+    inv_agg: dict = defaultdict(lambda: {"total_bos": 0.0, "category": None})
+    for inv in investments:
+        cid = inv.investment_category_id
+        inv_agg[cid]["total_bos"] += inv.bos or 0.0
+        if inv_agg[cid]["category"] is None and inv.investment_category is not None:
+            inv_agg[cid]["category"] = inv.investment_category
+
+    for cid, data in sorted(inv_agg.items()):
+        if not data["total_bos"]:
+            continue
+        cat = data["category"]
+        items.append(BosIncomeLineItem(
+            code=cat.code if cat else str(cid),
+            description=cat.label if cat else "Investasi",
+            amount=data["total_bos"],
+            source="investment",
+        ))
+        total_from_investments += data["total_bos"]
+
+    return BosIncomeSimulation(
+        items=items,
+        total_from_expenses=total_from_expenses,
+        total_from_investments=total_from_investments,
+        total=total_from_expenses + total_from_investments,
     )
 
 

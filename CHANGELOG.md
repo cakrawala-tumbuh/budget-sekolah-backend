@@ -7,6 +7,16 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.22.1] - 2026-06-11
+
+### Diperbaiki
+- Algoritma proporsi per unit (Siswa Baru UP & Total Siswa US) kini menjamin
+  total seluruh persentase final tepat **100%** meski sebagian unit menggunakan
+  override manual. Unit tanpa override mendapat bagian dari sisa
+  (1 − total_semua_override) dibagi proporsional berdasarkan jumlah siswa,
+  bukan dibagi terhadap total siswa seluruh unit. Sebelumnya total proporsi bisa
+  melebihi 100% bila ada campuran override dan auto.
+
 ## [1.22.0] - 2026-06-10
 
 ### Ditambahkan

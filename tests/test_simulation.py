@@ -565,6 +565,34 @@ class TestParentDepreciationAllocation:
         data = client.get(f"/organizations/{unit}/simulation/up").json()
         assert abs(data["cabang_allocated_old_asset_dep"] - 750_000.0) < 1.0
 
+    def test_auto_pct_fills_remainder_after_override(self, client):
+        """Unit tanpa override mendapat sisa proporsi (1 - sum_override) × porsi siswa."""
+        cabang = client.post("/organizations", json={
+            "code": "CBG-DEP-MIX", "name": "Cabang Mix", "org_type": "CABANG",
+        }).json()["id"]
+        unit_a = self._make_unit(client, "SD-DEP-MIX-A", cabang)
+        unit_b = self._make_unit(client, "SD-DEP-MIX-B", cabang)
+        unit_c = self._make_unit(client, "SD-DEP-MIX-C", cabang)
+        # A: override 0.40, B & C: auto dengan new_students 100 & 300
+        self._register(client, cabang, unit_a, new_students=60, override_pct_up=0.40)
+        self._register(client, cabang, unit_b, new_students=100)
+        self._register(client, cabang, unit_c, new_students=300)
+        # Dep cabang: 4_000_000 (untuk pembagian yang mudah dihitung)
+        self._add_old_asset(client, cabang, 16_000_000.0)  # dep = 16jt/4 = 4_000_000
+
+        data_a = client.get(f"/organizations/{unit_a}/simulation/up").json()
+        data_b = client.get(f"/organizations/{unit_b}/simulation/up").json()
+        data_c = client.get(f"/organizations/{unit_c}/simulation/up").json()
+
+        # A: override 0.40 -> 0.40 * 4_000_000 = 1_600_000
+        # sisa = 1.0 - 0.40 = 0.60; auto siswa total = 400
+        # B: 0.60 * (100/400) = 0.15 -> 0.15 * 4_000_000 = 600_000
+        # C: 0.60 * (300/400) = 0.45 -> 0.45 * 4_000_000 = 1_800_000
+        # total = 1_600_000 + 600_000 + 1_800_000 = 4_000_000 (100%)
+        assert abs(data_a["cabang_allocated_old_asset_dep"] - 1_600_000.0) < 1.0
+        assert abs(data_b["cabang_allocated_old_asset_dep"] - 600_000.0) < 1.0
+        assert abs(data_c["cabang_allocated_old_asset_dep"] - 1_800_000.0) < 1.0
+
     def test_override_up_rate_ignores_parent_dep(self, client):
         """Override tarif UP adalah tarif final; dep induk tidak ditambahkan ke tarif final."""
         cabang = client.post("/organizations", json={

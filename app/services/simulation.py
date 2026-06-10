@@ -50,13 +50,6 @@ class _ParentAllocation:
     total_us_pusat: float = 0.0
 
 
-def _ancestor_up_pct(this_alloc, total_new_all: int) -> float:
-    """Proporsi UP unit di suatu ancestor (override_pct_up bila ada)."""
-    if this_alloc.override_pct_up is not None:
-        return this_alloc.override_pct_up
-    return this_alloc.new_students / total_new_all
-
-
 def _ancestor_pcts(
     db: Session, org: Organization, ancestor: Organization
 ) -> tuple[float, float] | None:
@@ -64,8 +57,12 @@ def _ancestor_pcts(
     Proporsi (pct_up, pct_us) org di suatu ancestor berdasarkan
     ContributionAllocation.
 
-    - pct_up = new_students / total new_students kontributor (override_pct_up).
-    - pct_us = total_students / total students kontributor (override_pct_us).
+    Algoritma:
+    - Unit dengan ``override_pct_up``/``override_pct_us`` memakai nilai override.
+    - Unit tanpa override mendapat proporsi otomatis dari sisa (1 - jumlah_semua_override)
+      dibagi proporsional berdasarkan jumlah siswa unit tersebut terhadap total
+      siswa seluruh unit tanpa override.
+    - Jumlah seluruh proporsi final selalu tepat 100 %.
 
     Returns:
         Tuple (pct_up, pct_us), atau None bila org tidak terdaftar sebagai
@@ -78,14 +75,33 @@ def _ancestor_pcts(
     )
     if this_alloc is None:
         return None
-    total_students_all = sum(a.total_students for a in sibling_allocs) or 1
-    total_new_all = sum(a.new_students for a in sibling_allocs) or 1
-    pct_up = _ancestor_up_pct(this_alloc, total_new_all)
-    pct_us = (
-        this_alloc.override_pct_us
-        if this_alloc.override_pct_us is not None
-        else (this_alloc.total_students / total_students_all)
-    )
+
+    # UP — proporsi berdasarkan new_students
+    if this_alloc.override_pct_up is not None:
+        pct_up = this_alloc.override_pct_up
+    else:
+        sum_override_up = sum(
+            a.override_pct_up for a in sibling_allocs if a.override_pct_up is not None
+        )
+        remaining_up = max(0.0, 1.0 - sum_override_up)
+        auto_new_total = (
+            sum(a.new_students for a in sibling_allocs if a.override_pct_up is None) or 1
+        )
+        pct_up = remaining_up * (this_alloc.new_students / auto_new_total)
+
+    # US — proporsi berdasarkan total_students
+    if this_alloc.override_pct_us is not None:
+        pct_us = this_alloc.override_pct_us
+    else:
+        sum_override_us = sum(
+            a.override_pct_us for a in sibling_allocs if a.override_pct_us is not None
+        )
+        remaining_us = max(0.0, 1.0 - sum_override_us)
+        auto_students_total = (
+            sum(a.total_students for a in sibling_allocs if a.override_pct_us is None) or 1
+        )
+        pct_us = remaining_us * (this_alloc.total_students / auto_students_total)
+
     return pct_up, pct_us
 
 
@@ -98,8 +114,10 @@ def _allocated_components_from_ancestor(
     Hitung komponen UP dan US yang dialokasikan dari satu ancestor (Cabang
     atau Pusat) ke org ini, secara proporsional berdasarkan ContributionAllocation.
 
-    - UP: new_students / total new_students kontributor (override_pct_up).
-    - US: total_students / total students kontributor (override_pct_us).
+    - UP: proporsi dihitung via ``_ancestor_pcts`` (auto sisa override, berbasis
+      new_students).
+    - US: proporsi dihitung via ``_ancestor_pcts`` (auto sisa override, berbasis
+      total_students).
 
     Returns:
         Tuple (up_components, us_components, total_up_allocated, total_us_allocated).

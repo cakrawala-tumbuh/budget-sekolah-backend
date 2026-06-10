@@ -41,6 +41,7 @@ class BudgetEntryCreate(BudgetEntryBase):
 
 
 class BudgetEntryUpdate(BaseModel):
+    expense_category_id: int | None = None
     description: str | None = None
     basis: str | None = None
     foundation: float | None = None

@@ -7,6 +7,14 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.21.1] - 2026-06-10
+
+### Diperbaiki
+- `BudgetEntryUpdate` kini menyertakan field `expense_category_id` sehingga
+  pengguna dapat mengubah kategori biaya (operasional maupun non-operasional)
+  pada entri yang sudah ada. Sebelumnya field ini tidak ada di schema update
+  sehingga perubahan kategori dari UI tidak disimpan ke database.
+
 ## [1.21.0] - 2026-06-08
 
 ### Ditambahkan
@@ -184,7 +192,8 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 ### Ditambahkan
 - Rilis pertama Budget Backend YPII.
 
-[Unreleased]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.18.0...HEAD
+[Unreleased]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.21.1...HEAD
+[1.21.1]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.21.0...v1.21.1
 [1.18.0]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.15.1...v1.17.0
 [1.15.1]: https://github.com/cakrawala-tumbuh/budget-sekolah-backend/compare/v1.15.0...v1.15.1

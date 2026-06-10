@@ -62,3 +62,10 @@ class BudgetEntryRead(BudgetEntryBase):
 
 class BudgetEntryBulkCreate(BaseModel):
     entries: list[BudgetEntryCreate]
+
+
+class BudgetEntryBulkMoveCategory(BaseModel):
+    """Pindahkan banyak entri ke kategori biaya yang baru sekaligus."""
+
+    entry_ids: list[int]
+    expense_category_id: int

@@ -2,13 +2,14 @@
 Router entri anggaran biaya — CRUD untuk BudgetEntry.
 
 Endpoint:
-  GET    /organizations/{org_id}/budget-entries                               — semua baris
-  GET    /organizations/{org_id}/budget-entries?category_id={id}             — filter per kategori
-  POST   /organizations/{org_id}/budget-entries                              — buat satu baris
-  POST   /organizations/{org_id}/budget-entries/bulk                         — buat banyak baris
-  PUT    /organizations/{org_id}/budget-entries/{entry_id}                   — update baris
-  DELETE /organizations/{org_id}/budget-entries/{entry_id}                   — hapus baris
-  DELETE /organizations/{org_id}/budget-entries/by-category/{category_id}   — hapus per kategori
+  GET    /organizations/{org_id}/budget-entries                                    — semua baris
+  GET    /organizations/{org_id}/budget-entries?category_id={id}                  — filter per kategori
+  POST   /organizations/{org_id}/budget-entries                                   — buat satu baris
+  POST   /organizations/{org_id}/budget-entries/bulk                              — buat banyak baris
+  PATCH  /organizations/{org_id}/budget-entries/bulk-move-category                — pindah kategori masal
+  PUT    /organizations/{org_id}/budget-entries/{entry_id}                        — update baris
+  DELETE /organizations/{org_id}/budget-entries/{entry_id}                        — hapus baris
+  DELETE /organizations/{org_id}/budget-entries/by-category/{category_id}        — hapus per kategori
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -17,7 +18,8 @@ from ..auth import get_org_access
 from ..database import get_db
 from ..crud import budget_entry as crud, organization as org_crud
 from ..schemas.budget_entry import (
-    BudgetEntryCreate, BudgetEntryUpdate, BudgetEntryRead, BudgetEntryBulkCreate
+    BudgetEntryCreate, BudgetEntryUpdate, BudgetEntryRead,
+    BudgetEntryBulkCreate, BudgetEntryBulkMoveCategory,
 )
 
 router = APIRouter(
@@ -56,6 +58,16 @@ def create_entry(org_id: int, data: BudgetEntryCreate, db: Session = Depends(get
 def bulk_create_entries(org_id: int, data: BudgetEntryBulkCreate, db: Session = Depends(get_db)):
     _get_org_or_404(db, org_id)
     return crud.bulk_create(db, org_id, data.entries)
+
+
+@router.patch("/bulk-move-category", response_model=list[BudgetEntryRead])
+def bulk_move_category(
+    org_id: int,
+    data: BudgetEntryBulkMoveCategory,
+    db: Session = Depends(get_db),
+):
+    _get_org_or_404(db, org_id)
+    return crud.bulk_move_category(db, org_id, data.entry_ids, data.expense_category_id)
 
 
 @router.put("/{entry_id}", response_model=BudgetEntryRead)

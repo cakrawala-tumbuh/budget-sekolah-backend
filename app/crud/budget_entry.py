@@ -66,6 +66,39 @@ def delete(db: Session, entry: BudgetEntry) -> None:
     db.commit()
 
 
+def bulk_move_category(
+    db: Session,
+    org_id: int,
+    entry_ids: list[int],
+    expense_category_id: int,
+) -> list[BudgetEntry]:
+    """Pindahkan sejumlah entri ke kategori biaya baru dalam satu transaksi.
+
+    Args:
+        db: Database session.
+        org_id: ID organisasi — hanya entri milik org ini yang diubah.
+        entry_ids: Daftar ID entri yang akan dipindahkan.
+        expense_category_id: ID kategori tujuan.
+
+    Returns:
+        Daftar entri yang berhasil diperbarui.
+    """
+    entries = (
+        db.query(BudgetEntry)
+        .filter(
+            BudgetEntry.id.in_(entry_ids),
+            BudgetEntry.organization_id == org_id,
+        )
+        .all()
+    )
+    for entry in entries:
+        entry.expense_category_id = expense_category_id
+    db.commit()
+    for entry in entries:
+        db.refresh(entry)
+    return entries
+
+
 def delete_by_org_and_category(db: Session, org_id: int, expense_category_id: int) -> int:
     """Hapus semua rincian suatu kategori biaya. Returns jumlah baris dihapus."""
     n = (

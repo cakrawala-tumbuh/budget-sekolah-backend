@@ -7,6 +7,14 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-06-10
+
+### Ditambahkan
+- Endpoint `PATCH /organizations/{id}/budget-entries/bulk-move-category` untuk
+  memindahkan banyak entri biaya ke kategori lain sekaligus dalam satu request.
+  Menerima `entry_ids` (daftar ID) dan `expense_category_id` tujuan; hanya
+  mengubah entri milik organisasi yang bersangkutan.
+
 ## [1.21.1] - 2026-06-10
 
 ### Diperbaiki

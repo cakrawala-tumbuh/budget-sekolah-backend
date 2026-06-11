@@ -106,6 +106,9 @@ def get_current_user(
     user = get_by_username(db, username)
     if user is None:
         raise credentials_exc
+    token_version: int | None = payload.get("ver")
+    if token_version is None or token_version != user.token_version:
+        raise credentials_exc
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

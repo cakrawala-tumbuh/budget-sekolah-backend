@@ -2,8 +2,9 @@
 Router autentikasi.
 
 Endpoint:
-  POST /auth/login  — login dengan username + password, kembalikan JWT token
-  GET  /auth/me     — info user yang sedang login
+  POST /auth/login   — login dengan username + password, kembalikan JWT token
+  POST /auth/logout  — invalidasi token saat ini dengan increment token_version
+  GET  /auth/me      — info user yang sedang login
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -48,8 +49,26 @@ def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Akun dinonaktifkan",
         )
-    token = create_access_token({"sub": user.username})
+    token = create_access_token({"sub": user.username, "ver": user.token_version})
     return Token(access_token=token)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Logout — invalidasi token saat ini dengan menaikkan token_version user.
+
+    Semua token lama yang diterbitkan sebelum logout ini otomatis ditolak.
+
+    Args:
+        current_user: User yang sedang login (dari JWT).
+        db: Sesi database.
+    """
+    current_user.token_version += 1
+    db.commit()
 
 
 @router.get("/me", response_model=UserRead)

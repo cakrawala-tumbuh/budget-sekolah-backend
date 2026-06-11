@@ -92,6 +92,14 @@ def _run_lightweight_migrations() -> None:
                 "ALTER TABLE organizations ADD COLUMN locked_by_username VARCHAR(100)"
             ))
         print("[startup] Migrated: added organizations.locked_by_username")
+    if "users" in inspector.get_table_names():
+        user_columns = {col["name"] for col in inspector.get_columns("users")}
+        if "token_version" not in user_columns:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"
+                ))
+            print("[startup] Migrated: added users.token_version")
 
 
 @asynccontextmanager

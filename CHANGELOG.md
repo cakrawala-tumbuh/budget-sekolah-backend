@@ -7,6 +7,18 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-06-11
+
+### Ditambahkan
+- Endpoint `POST /auth/logout` untuk invalidasi token saat ini di sisi server.
+  Logout menaikkan `token_version` user sehingga semua token lama yang pernah
+  diterbitkan langsung ditolak — sesi tidak dapat direuse meski token belum
+  kedaluwarsa.
+- Kolom `token_version` (integer, default 0) pada tabel `users`; migrasi ringan
+  otomatis dijalankan saat startup untuk database lama.
+- Field `ver` (token version) disertakan dalam payload JWT sejak login agar
+  `get_current_user` dapat memvalidasi kecocokannya dengan nilai di database.
+
 ## [1.22.1] - 2026-06-11
 
 ### Diperbaiki

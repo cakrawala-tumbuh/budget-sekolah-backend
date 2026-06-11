@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum as PyEnum
 
-from sqlalchemy import String, DateTime, ForeignKey, Enum, Float
+from sqlalchemy import Boolean, String, DateTime, ForeignKey, Enum, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
@@ -30,6 +30,11 @@ class Organization(Base):
     cash_balance: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     # UNIT → parent is CABANG; CABANG → parent is PUSAT
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"))
+    # Penguncian budget: setelah dikunci tidak ada data anggaran yang bisa diubah
+    is_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    locked_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    locked_by_username: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, onupdate=_now

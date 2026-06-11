@@ -13,7 +13,7 @@ Endpoint:
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..auth import get_org_access
+from ..auth import get_org_access, require_not_locked
 from ..database import get_db
 from ..crud import income_entry as crud, organization as org_crud
 from ..schemas.income_entry import (
@@ -47,19 +47,19 @@ def list_entries(
 
 
 @router.post("", response_model=IncomeEntryRead, status_code=status.HTTP_201_CREATED)
-def create_entry(org_id: int, data: IncomeEntryCreate, db: Session = Depends(get_db)):
+def create_entry(org_id: int, data: IncomeEntryCreate, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_org_or_404(db, org_id)
     return crud.create(db, org_id, data)
 
 
 @router.post("/bulk", response_model=list[IncomeEntryRead], status_code=status.HTTP_201_CREATED)
-def bulk_create_entries(org_id: int, data: IncomeEntryBulkCreate, db: Session = Depends(get_db)):
+def bulk_create_entries(org_id: int, data: IncomeEntryBulkCreate, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_org_or_404(db, org_id)
     return crud.bulk_create(db, org_id, data.entries)
 
 
 @router.put("/{entry_id}", response_model=IncomeEntryRead)
-def update_entry(org_id: int, entry_id: int, data: IncomeEntryUpdate, db: Session = Depends(get_db)):
+def update_entry(org_id: int, entry_id: int, data: IncomeEntryUpdate, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_org_or_404(db, org_id)
     entry = crud.get(db, entry_id)
     if entry is None or entry.organization_id != org_id:
@@ -68,7 +68,7 @@ def update_entry(org_id: int, entry_id: int, data: IncomeEntryUpdate, db: Sessio
 
 
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_entry(org_id: int, entry_id: int, db: Session = Depends(get_db)):
+def delete_entry(org_id: int, entry_id: int, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_org_or_404(db, org_id)
     entry = crud.get(db, entry_id)
     if entry is None or entry.organization_id != org_id:
@@ -77,6 +77,6 @@ def delete_entry(org_id: int, entry_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/by-category/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_by_category(org_id: int, category_id: int, db: Session = Depends(get_db)):
+def delete_by_category(org_id: int, category_id: int, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_org_or_404(db, org_id)
     crud.delete_by_org_and_category(db, org_id, category_id)

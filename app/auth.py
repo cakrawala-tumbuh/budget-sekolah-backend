@@ -131,6 +131,26 @@ def require_admin(
     return current_user
 
 
+def require_not_locked(
+    org_id: int,
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    FastAPI dependency — blokir operasi tulis jika budget organisasi sudah dikunci.
+
+    Raises:
+        HTTPException 423: Budget organisasi telah dikunci.
+    """
+    from .crud import organization as org_crud
+    org = org_crud.get(db, org_id)
+    if org and org.is_locked:
+        locked_by = org.locked_by_username or "pengguna tidak diketahui"
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail=f"Budget organisasi ini telah dikunci oleh {locked_by}",
+        )
+
+
 def get_org_access(
     org_id: int,
     current_user: Annotated[User, Depends(get_current_user)],

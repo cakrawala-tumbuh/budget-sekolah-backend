@@ -11,7 +11,7 @@ Endpoint:
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..auth import get_org_access
+from ..auth import get_org_access, require_not_locked
 from ..database import get_db
 from ..config import settings
 from ..crud import misc as crud, organization as org_crud
@@ -59,7 +59,7 @@ def list_old_assets(org_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=DepreciationOldAssetRead, status_code=status.HTTP_201_CREATED)
-def add_old_asset(org_id: int, data: DepreciationOldAssetCreate, db: Session = Depends(get_db)):
+def add_old_asset(org_id: int, data: DepreciationOldAssetCreate, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_org_or_404(db, org_id)
     fiscal_year = int(settings.budget_year.split("-")[0])
     dep = crud.create_dep(db, org_id, data)
@@ -67,7 +67,7 @@ def add_old_asset(org_id: int, data: DepreciationOldAssetCreate, db: Session = D
 
 
 @router.put("/{dep_id}", response_model=DepreciationOldAssetRead)
-def update_old_asset(org_id: int, dep_id: int, data: DepreciationOldAssetUpdate, db: Session = Depends(get_db)):
+def update_old_asset(org_id: int, dep_id: int, data: DepreciationOldAssetUpdate, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_org_or_404(db, org_id)
     dep = crud.get_dep(db, dep_id)
     if dep is None or dep.organization_id != org_id:
@@ -78,7 +78,7 @@ def update_old_asset(org_id: int, dep_id: int, data: DepreciationOldAssetUpdate,
 
 
 @router.delete("/{dep_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_old_asset(org_id: int, dep_id: int, db: Session = Depends(get_db)):
+def delete_old_asset(org_id: int, dep_id: int, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_org_or_404(db, org_id)
     dep = crud.get_dep(db, dep_id)
     if dep is None or dep.organization_id != org_id:

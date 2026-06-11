@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..auth import get_org_access
+from ..auth import get_org_access, require_not_locked
 from ..database import get_db
 from ..crud import assumption as crud, organization as org_crud
 from ..models.organization import OrgType
@@ -33,13 +33,13 @@ def get_assumption(org_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("", response_model=UnitAssumptionRead)
-def upsert_assumption(org_id: int, data: UnitAssumptionCreate, db: Session = Depends(get_db)):
+def upsert_assumption(org_id: int, data: UnitAssumptionCreate, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_unit_or_404(db, org_id)
     return crud.upsert(db, org_id, data)
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
-def delete_assumption(org_id: int, db: Session = Depends(get_db)):
+def delete_assumption(org_id: int, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_unit_or_404(db, org_id)
     if not crud.delete(db, org_id):
         raise HTTPException(status_code=404, detail="Asumsi belum diisi")

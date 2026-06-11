@@ -14,7 +14,7 @@ Aturan keterhubungan:
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..auth import get_org_access
+from ..auth import get_org_access, require_not_locked
 from ..database import get_db
 from ..crud import organization as org_crud
 from ..crud import subsidy as crud
@@ -100,7 +100,7 @@ def list_subsidies(org_id: int, db: Session = Depends(get_db)):
     status_code=status.HTTP_201_CREATED,
     summary="Tambah subsidi ke penerima",
 )
-def create_subsidy(org_id: int, data: SubsidyCreate, db: Session = Depends(get_db)):
+def create_subsidy(org_id: int, data: SubsidyCreate, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     provider = _get_provider_or_404(db, org_id)
     _validate_recipient(db, provider, data.recipient_org_id)
     subsidy = crud.create(db, org_id, data)
@@ -113,7 +113,7 @@ def create_subsidy(org_id: int, data: SubsidyCreate, db: Session = Depends(get_d
     summary="Perbarui subsidi",
 )
 def update_subsidy(
-    org_id: int, subsidy_id: int, data: SubsidyUpdate, db: Session = Depends(get_db)
+    org_id: int, subsidy_id: int, data: SubsidyUpdate, db: Session = Depends(get_db), _=Depends(require_not_locked)
 ):
     provider = _get_provider_or_404(db, org_id)
     subsidy = crud.get(db, subsidy_id)
@@ -130,7 +130,7 @@ def update_subsidy(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Hapus subsidi",
 )
-def delete_subsidy(org_id: int, subsidy_id: int, db: Session = Depends(get_db)):
+def delete_subsidy(org_id: int, subsidy_id: int, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_provider_or_404(db, org_id)
     subsidy = crud.get(db, subsidy_id)
     if subsidy is None or subsidy.provider_org_id != org_id:

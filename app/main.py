@@ -67,6 +67,31 @@ def _run_lightweight_migrations() -> None:
                     "ALTER TABLE investments ADD COLUMN bos FLOAT NOT NULL DEFAULT 0.0"
                 ))
             print("[startup] Migrated: added investments.bos")
+    # Kolom penguncian budget
+    if "is_locked" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE organizations ADD COLUMN is_locked BOOLEAN NOT NULL DEFAULT 0"
+            ))
+        print("[startup] Migrated: added organizations.is_locked")
+    if "locked_at" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE organizations ADD COLUMN locked_at DATETIME"
+            ))
+        print("[startup] Migrated: added organizations.locked_at")
+    if "locked_by_user_id" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE organizations ADD COLUMN locked_by_user_id INTEGER REFERENCES users(id)"
+            ))
+        print("[startup] Migrated: added organizations.locked_by_user_id")
+    if "locked_by_username" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE organizations ADD COLUMN locked_by_username VARCHAR(100)"
+            ))
+        print("[startup] Migrated: added organizations.locked_by_username")
 
 
 @asynccontextmanager

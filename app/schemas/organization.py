@@ -47,6 +47,9 @@ class OrganizationCashBalanceUpdate(BaseModel):
 
 class OrganizationRead(OrganizationBase):
     id: int
+    is_locked: bool
+    locked_at: datetime | None
+    locked_by_username: str | None
     created_at: datetime
     updated_at: datetime
 

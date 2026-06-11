@@ -9,7 +9,7 @@ Endpoint:
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..auth import get_org_access
+from ..auth import get_org_access, require_not_locked
 from ..database import get_db
 from ..crud import grade_config as crud, organization as org_crud
 from ..models.organization import OrgType
@@ -49,7 +49,7 @@ def get_grade_config(org_id: int, db: Session = Depends(get_db)):
 
 @router.put("", response_model=GradeConfigRead)
 def upsert_grade_config(
-    org_id: int, data: GradeConfigCreate, db: Session = Depends(get_db)
+    org_id: int, data: GradeConfigCreate, db: Session = Depends(get_db), _=Depends(require_not_locked)
 ):
     """Buat atau perbarui konfigurasi grade satuan pendidikan.
 
@@ -61,7 +61,7 @@ def upsert_grade_config(
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
-def delete_grade_config(org_id: int, db: Session = Depends(get_db)):
+def delete_grade_config(org_id: int, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     """Hapus konfigurasi grade satuan pendidikan.
 
     Setelah dihapus, asumsi kembali ke default 6 grade dengan label "Kelas 1"–"Kelas 6".

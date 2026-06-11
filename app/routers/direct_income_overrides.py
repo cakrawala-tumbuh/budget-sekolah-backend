@@ -9,7 +9,7 @@ Endpoint:
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..auth import get_org_access
+from ..auth import get_org_access, require_not_locked
 from ..database import get_db
 from ..crud import direct_income_override as crud
 from ..crud import organization as org_crud
@@ -47,6 +47,7 @@ def upsert_override(
     expense_category_id: int,
     data: DirectIncomeOverrideUpsert,
     db: Session = Depends(get_db),
+    _=Depends(require_not_locked),
 ):
     _get_org_or_404(db, org_id)
     exp_cat = exp_crud.get(db, expense_category_id)
@@ -65,7 +66,7 @@ def upsert_override(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Hapus override — nilai kembali ke otomatis dari budget entry",
 )
-def delete_override(org_id: int, expense_category_id: int, db: Session = Depends(get_db)):
+def delete_override(org_id: int, expense_category_id: int, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_org_or_404(db, org_id)
     obj = crud.get_by_org_and_expense(db, org_id, expense_category_id)
     if obj is None:

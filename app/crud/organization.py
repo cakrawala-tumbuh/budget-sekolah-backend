@@ -4,6 +4,8 @@ CRUD untuk entitas Organization.
 Fungsi `get_by_code` menggunakan kode uppercase agar pencarian case-insensitive.
 Fungsi `create` dan `update` menerima schema Pydantic dan melakukan commit+refresh.
 """
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
 
 from ..models.organization import Organization
@@ -82,3 +84,25 @@ def update(db: Session, org: Organization, data: OrganizationUpdate) -> Organiza
 def delete(db: Session, org: Organization) -> None:
     db.delete(org)
     db.commit()
+
+
+def lock(db: Session, org: Organization, user_id: int, username: str) -> Organization:
+    """Kunci budget organisasi. Catat siapa yang mengunci dan kapan."""
+    org.is_locked = True
+    org.locked_at = datetime.now(timezone.utc)
+    org.locked_by_user_id = user_id
+    org.locked_by_username = username
+    db.commit()
+    db.refresh(org)
+    return org
+
+
+def unlock(db: Session, org: Organization) -> Organization:
+    """Buka kunci budget organisasi."""
+    org.is_locked = False
+    org.locked_at = None
+    org.locked_by_user_id = None
+    org.locked_by_username = None
+    db.commit()
+    db.refresh(org)
+    return org

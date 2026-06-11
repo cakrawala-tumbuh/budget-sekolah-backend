@@ -18,6 +18,7 @@ from ..auth import (
     get_current_user,
     get_org_access,
     require_admin,
+    require_not_locked,
 )
 from ..crud import organization as crud
 from ..crud.user import create_user, get_by_org_id, update_password
@@ -138,6 +139,7 @@ def update_organization_cash_balance(
     data: OrganizationCashBalanceUpdate,
     db: Session = Depends(get_db),
     _=Depends(get_org_access),
+    __=Depends(require_not_locked),
 ):
     """
     Update saldo kas & setara kas organisasi.
@@ -159,6 +161,37 @@ def delete_organization(
 ):
     obj = _get_or_404(db, org_id)
     crud.delete(db, obj)
+
+
+@router.post("/{org_id}/lock", response_model=OrganizationRead)
+def lock_organization(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_org_access),
+):
+    """
+    Kunci budget organisasi (tidak bisa diedit setelah ini).
+
+    - Admin: boleh mengunci organisasi mana pun.
+    - PUSAT: boleh mengunci dirinya sendiri dan semua cabang/unit di bawahnya.
+    - CABANG: boleh mengunci dirinya sendiri dan semua unit di bawahnya.
+    - UNIT: boleh mengunci dirinya sendiri saja.
+    """
+    obj = _get_or_404(db, org_id)
+    return crud.lock(db, obj, current_user.id, current_user.username)
+
+
+@router.post("/{org_id}/unlock", response_model=OrganizationRead)
+def unlock_organization(
+    org_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_org_access),
+):
+    """
+    Buka kunci budget organisasi. Hak akses sama dengan endpoint lock.
+    """
+    obj = _get_or_404(db, org_id)
+    return crud.unlock(db, obj)
 
 
 @router.post("/{org_id}/reset-password", response_model=OrganizationPasswordReset)

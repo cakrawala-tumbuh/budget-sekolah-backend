@@ -10,7 +10,7 @@ Endpoint:
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..auth import get_org_access
+from ..auth import get_org_access, require_not_locked
 from ..database import get_db
 from ..crud import investment as crud, organization as org_crud
 from ..crud import investment_category as inv_cat_crud
@@ -37,7 +37,7 @@ def list_investments(org_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=InvestmentRead, status_code=status.HTTP_201_CREATED)
-def create_investment(org_id: int, data: InvestmentCreate, db: Session = Depends(get_db)):
+def create_investment(org_id: int, data: InvestmentCreate, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_org_or_404(db, org_id)
     if inv_cat_crud.get(db, data.investment_category_id) is None:
         raise HTTPException(status_code=422, detail="investment_category_id not found")
@@ -45,7 +45,7 @@ def create_investment(org_id: int, data: InvestmentCreate, db: Session = Depends
 
 
 @router.put("/{inv_id}", response_model=InvestmentRead)
-def update_investment(org_id: int, inv_id: int, data: InvestmentUpdate, db: Session = Depends(get_db)):
+def update_investment(org_id: int, inv_id: int, data: InvestmentUpdate, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_org_or_404(db, org_id)
     inv = crud.get(db, inv_id)
     if inv is None or inv.organization_id != org_id:
@@ -54,7 +54,7 @@ def update_investment(org_id: int, inv_id: int, data: InvestmentUpdate, db: Sess
 
 
 @router.delete("/{inv_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_investment(org_id: int, inv_id: int, db: Session = Depends(get_db)):
+def delete_investment(org_id: int, inv_id: int, db: Session = Depends(get_db), _=Depends(require_not_locked)):
     _get_org_or_404(db, org_id)
     inv = crud.get(db, inv_id)
     if inv is None or inv.organization_id != org_id:

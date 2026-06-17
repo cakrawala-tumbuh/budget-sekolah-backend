@@ -88,3 +88,6 @@ class Organization(Base):
     direct_income_overrides: Mapped[list["DirectIncomeOverride"]] = relationship(  # noqa: F821
         "DirectIncomeOverride", back_populates="organization"
     )
+    financial_investments: Mapped[list["FinancialInvestment"]] = relationship(  # noqa: F821
+        "FinancialInvestment", back_populates="organization"
+    )

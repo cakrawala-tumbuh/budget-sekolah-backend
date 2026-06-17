@@ -15,6 +15,7 @@ from .parent_expense_allocation import ParentExpenseAllocation
 from .subsidy import Subsidy
 from .user import User
 from .direct_income_override import DirectIncomeOverride
+from .financial_investment import FinancialInvestment, InstrumentType
 
 __all__ = [
     "Organization",
@@ -35,4 +36,6 @@ __all__ = [
     "Subsidy",
     "User",
     "DirectIncomeOverride",
+    "FinancialInvestment",
+    "InstrumentType",
 ]

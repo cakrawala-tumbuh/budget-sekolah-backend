@@ -12,6 +12,7 @@ from ..crud import investment as crud_inv, misc as crud_misc, income_entry as cr
 from ..crud import parent_expense_allocation as crud_pea
 from ..crud import subsidy as crud_subsidy
 from ..crud import direct_income_override as crud_dio
+from ..crud import financial_investment as crud_fin_inv
 from ..models.organization import Organization, OrgType
 from ..models.income_category import IncomeCalcMethod
 from ..schemas.simulation import (
@@ -273,6 +274,22 @@ def _get_parent_allocated_new_investment_dep(db: Session, org: Organization) -> 
     return _get_parent_allocated_dep(db, org, ancestor_dep)
 
 
+def _get_parent_allocated_financial_investment(
+    db: Session, org: Organization
+) -> tuple[float, float]:
+    """
+    Porsi total investasi keuangan induk yang dialokasikan ke unit ini,
+    dipisahkan antara Cabang dan Pusat.
+
+    Alokasi proporsional berdasarkan pct_up (new_students) identik dengan pola
+    depresiasi induk. Lihat :func:`_get_parent_allocated_dep`.
+    """
+    def ancestor_fin_inv(ancestor: Organization) -> float:
+        return sum(fi.amount for fi in crud_fin_inv.list_by_org(db, ancestor.id))
+
+    return _get_parent_allocated_dep(db, org, ancestor_fin_inv)
+
+
 def _unit_setoran_to_ancestor(
     db: Session, org: Organization, ancestor: Organization
 ) -> tuple[float, float]:
@@ -304,8 +321,9 @@ def _unit_setoran_to_ancestor(
     old_dep = sum(
         a.dep_current_year(fiscal_year) for a in crud_misc.list_dep_by_org(db, ancestor.id)
     )
+    fin_inv_total = sum(fi.amount for fi in crud_fin_inv.list_by_org(db, ancestor.id))
 
-    setoran_up = beban_up + pct_up * (new_dep + old_dep)
+    setoran_up = beban_up + pct_up * (new_dep + old_dep + fin_inv_total)
     setoran_us = beban_us
     return setoran_up, setoran_us
 
@@ -362,12 +380,18 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
     cabang_allocated_old_asset_dep, pusat_allocated_old_asset_dep = (
         _get_parent_allocated_old_asset_dep(db, org)
     )
+    cabang_financial_investment_allocated, pusat_financial_investment_allocated = (
+        _get_parent_allocated_financial_investment(db, org)
+    )
     total_dep = (
         new_investment_dep + old_asset_dep
         + cabang_allocated_new_investment_dep + pusat_allocated_new_investment_dep
         + cabang_allocated_old_asset_dep + pusat_allocated_old_asset_dep
     )
-    total_up_cost_with_dep = total_up_cost + total_dep
+    total_up_cost_with_dep = (
+        total_up_cost + total_dep
+        + cabang_financial_investment_allocated + pusat_financial_investment_allocated
+    )
     new_student_count = (assumption.new_student_count if assumption else 0) or 1
     auto_up_rate = total_up_cost_with_dep / new_student_count
     # Override tarif UP diambil apa adanya dari asumsi unit sebagai tarif final
@@ -391,6 +415,8 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
         pusat_allocated_new_investment_dep=pusat_allocated_new_investment_dep,
         cabang_allocated_old_asset_dep=cabang_allocated_old_asset_dep,
         pusat_allocated_old_asset_dep=pusat_allocated_old_asset_dep,
+        cabang_financial_investment_allocated=cabang_financial_investment_allocated,
+        pusat_financial_investment_allocated=pusat_financial_investment_allocated,
         total_up_cost_with_dep=total_up_cost_with_dep,
         new_student_count=new_student_count,
         auto_up_rate=auto_up_rate,
@@ -722,6 +748,24 @@ def simulate_expenses(db: Session, org: Organization) -> ExpenseSimulation:
             ))
             total_op += amount
 
+        # Alokasi investasi keuangan (saham/reksa dana/dll.) dari Cabang & Pusat
+        fin_inv_cabang, fin_inv_pusat = _get_parent_allocated_financial_investment(db, org)
+        fin_inv_lines = [
+            ("ALLOC:FIN-INV-CBG", "[Alokasi Cabang] Investasi Keuangan", fin_inv_cabang),
+            ("ALLOC:FIN-INV-PST", "[Alokasi Pusat] Investasi Keuangan", fin_inv_pusat),
+        ]
+        for code, desc, amount in fin_inv_lines:
+            if not amount:
+                continue
+            operational.append(ExpenseAccountSummary(
+                account_code=code,
+                description=desc,
+                total_yayasan=amount,
+                total_bos=0.0,
+                total=amount,
+            ))
+            total_op += amount
+
     return ExpenseSimulation(
         operational=operational,
         non_operational=non_operational,
@@ -796,6 +840,7 @@ def _allocatable_base(db: Session, org: Organization) -> tuple[float, float]:
     base_up += sum(
         a.dep_current_year(fiscal_year) for a in crud_misc.list_dep_by_org(db, org.id)
     )
+    base_up += sum(fi.amount for fi in crud_fin_inv.list_by_org(db, org.id))
     return base_up, base_us
 
 
@@ -991,7 +1036,11 @@ def simulate_summary(db: Session, org: Organization) -> BudgetSummary:
     total_cash_revenue = income.total
     total_cash_revenue_auto = income.total_auto
     total_cash_expenses = expenses.total
-    total_investments = sum(inv.purchase_price for inv in investments)
+    financial_investments = crud_fin_inv.list_by_org(db, org.id)
+    total_investments = (
+        sum(inv.purchase_price for inv in investments)
+        + sum(fi.amount for fi in financial_investments)
+    )
     cash_surplus_deficit = total_cash_revenue - total_cash_expenses - total_investments
     cash_surplus_deficit_auto = total_cash_revenue_auto - total_cash_expenses - total_investments
     # Saldo kas & setara kas: awal (dari master organisasi) + surplus/defisit kas

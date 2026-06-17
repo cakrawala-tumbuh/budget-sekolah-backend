@@ -31,6 +31,7 @@ from .routers import (
     subsidies_router,
     simulation_router,
     direct_income_overrides_router,
+    financial_investments_router,
     auth_router,
     users_router,
     database_router,
@@ -169,6 +170,7 @@ app.include_router(parent_expense_allocations_router)
 app.include_router(subsidies_router)
 app.include_router(simulation_router)
 app.include_router(direct_income_overrides_router)
+app.include_router(financial_investments_router)
 
 
 @app.get("/", tags=["Health"])

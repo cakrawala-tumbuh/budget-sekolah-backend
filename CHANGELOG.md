@@ -7,6 +7,28 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.32.0] - 2026-06-17
+
+### Ditambahkan
+- **Investasi Keuangan CABANG/PUSAT**: Model `FinancialInvestment` dan tabel
+  `financial_investments` untuk mencatat instrumen investasi keuangan (saham,
+  reksa dana, obligasi, deposito, dll.) milik CABANG atau PUSAT.
+- Endpoint CRUD baru `GET/POST/PUT/DELETE /organizations/{org_id}/financial-investments`.
+  Operasi write divalidasi hanya untuk CABANG dan PUSAT — UNIT tidak dapat
+  mengelola investasi keuangan.
+- Total investasi keuangan CABANG/PUSAT dialokasikan ke UNIT anak secara
+  proporsional berdasarkan `new_students` (pct_up), muncul sebagai beban UP di
+  simulasi unit penerima.
+- Alokasi investasi keuangan dari Cabang dan Pusat ditambahkan ke
+  `UPSimulation` sebagai field `cabang_financial_investment_allocated` dan
+  `pusat_financial_investment_allocated`, serta masuk `total_up_cost_with_dep`.
+- Alokasi investasi keuangan muncul di `ExpenseSimulation` unit penerima
+  sebagai baris operasional `[Alokasi Cabang/Pusat] Investasi Keuangan`.
+- Total investasi keuangan org itu sendiri masuk `total_investments` di
+  `BudgetSummary` (cash outflow), konsisten dengan pembelian aset tetap.
+- Setoran UP unit ke induk (`_unit_setoran_to_ancestor`) sudah menyertakan
+  porsi investasi keuangan induk agar konsolidasi unit–induk tetap seimbang.
+
 ## [1.31.0] - 2026-06-11
 
 ### Ditambahkan

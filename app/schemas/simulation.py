@@ -32,6 +32,10 @@ class UPSimulation(BaseModel):
     # dipisahkan antara Cabang dan Pusat
     cabang_allocated_old_asset_dep: float
     pusat_allocated_old_asset_dep: float
+    # Investasi keuangan (saham/reksa dana/dll.) Cabang & Pusat yang dialokasikan
+    # ke unit ini berdasarkan pct_up (new_students), menambah beban UP unit
+    cabang_financial_investment_allocated: float
+    pusat_financial_investment_allocated: float
     total_up_cost_with_dep: float
     new_student_count: int
     auto_up_rate: float

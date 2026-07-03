@@ -7,6 +7,17 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.34.1] - 2026-07-03
+
+### Diperbaiki
+- `simulate_income` untuk organisasi CABANG/PUSAT: pendapatan setoran UP/US
+  (`4630.01`/`4630.02`) dari child UNIT kini ikut di-gate oleh parameter
+  `include_parent_allocation`. Sebelumnya blok ini selalu dijalankan meski
+  `include_parent_allocation=false`, sehingga endpoint `summary-comparative`
+  menampilkan baris Cabang/Pusat yang identik pada tab "Dengan Alokasi ke
+  Induk" maupun "Tanpa Alokasi ke Induk" — melanggar simetri konsolidasi
+  1:1 dengan beban alokasi di sisi unit (`simulate_expenses`).
+
 ## [1.34.0] - 2026-07-03
 
 ### Ditambahkan

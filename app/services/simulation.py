@@ -510,8 +510,11 @@ def simulate_income(
     Args:
         db: Database session.
         org: Organisasi yang disimulasikan.
-        include_parent_allocation: Sertakan beban alokasi induk (Cabang/Pusat)
-            pada UP/US unit. Hanya berlaku untuk org UNIT.
+        include_parent_allocation: Untuk org UNIT, sertakan beban alokasi induk
+            (Cabang/Pusat) pada UP/US unit. Untuk org CABANG/PUSAT, sertakan
+            pendapatan setoran (kontribusi UP/US) dari child UNIT — bila False,
+            setoran itu dilewati agar simetris dengan sisi unit yang juga tidak
+            membukukan beban alokasinya (lihat simulate_expenses).
 
     Returns:
         IncomeSimulation dengan daftar item pendapatan dan total.
@@ -610,22 +613,25 @@ def simulate_income(
         # ditanggung unit. Setoran ini identik dengan beban alokasi di sisi unit
         # (lihat simulate_expenses), sehingga buku unit & induk konsolidasi 1:1.
         # Tidak bergantung pada tarif UP/US unit, jadi nilai final = auto.
-        allocations = crud_misc.list_allocations(db, org.id)
+        # Bila include_parent_allocation=False, setoran ini dilewati — simetris
+        # dengan sisi unit yang juga tidak membukukan beban alokasinya.
+        if include_parent_allocation:
+            allocations = crud_misc.list_allocations(db, org.id)
 
-        for alloc in allocations:
-            from_org = alloc.from_organization
-            if from_org is None or from_org.org_type != OrgType.UNIT:
-                continue
-            setoran_up, setoran_us = _unit_setoran_to_ancestor(db, from_org, org)
-            name = from_org.name
-            if setoran_up:
-                items.append(IncomeItem(account_code="4630.01", description=f"Kontribusi UP dari {name}", total=setoran_up, auto_total=setoran_up))
-                total += setoran_up
-                total_auto += setoran_up
-            if setoran_us:
-                items.append(IncomeItem(account_code="4630.02", description=f"Kontribusi US dari {name}", total=setoran_us, auto_total=setoran_us))
-                total += setoran_us
-                total_auto += setoran_us
+            for alloc in allocations:
+                from_org = alloc.from_organization
+                if from_org is None or from_org.org_type != OrgType.UNIT:
+                    continue
+                setoran_up, setoran_us = _unit_setoran_to_ancestor(db, from_org, org)
+                name = from_org.name
+                if setoran_up:
+                    items.append(IncomeItem(account_code="4630.01", description=f"Kontribusi UP dari {name}", total=setoran_up, auto_total=setoran_up))
+                    total += setoran_up
+                    total_auto += setoran_up
+                if setoran_us:
+                    items.append(IncomeItem(account_code="4630.02", description=f"Kontribusi US dari {name}", total=setoran_us, auto_total=setoran_us))
+                    total += setoran_us
+                    total_auto += setoran_us
 
         income_entries = crud_income.list_by_org(db, org.id)
         income_agg = defaultdict(lambda: {"total": 0.0, "code": "", "label": ""})

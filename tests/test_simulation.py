@@ -905,3 +905,58 @@ class TestComparativeSummary:
         org_row = data["organization"]["summary_with_allocation"]
         assert org_row["organization_id"] == cabang
         assert org_row["org_type"] == "CABANG"
+
+    def test_org_row_differs_with_and_without_allocation(self, client):
+        """
+        Baris Cabang/Pusat harus berubah antar tab alokasi juga — bukan hanya
+        baris Unit. Tanpa alokasi ke induk, setoran UP/US dari unit (4630.01/
+        4630.02) tidak boleh diakui sebagai pendapatan induk.
+        """
+        pusat, cabang, unit = _setup_parent_chain(client, "CMP-ORGDIFF")
+        resp = client.get(f"/organizations/{cabang}/simulation/summary-comparative")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()
+        with_alloc = data["organization"]["summary_with_allocation"]
+        without_alloc = data["organization"]["summary_without_allocation"]
+
+        assert with_alloc["total_cash_revenue"] > without_alloc["total_cash_revenue"]
+        # Cabang tak punya manual income/subsidi sendiri -> tanpa setoran unit = 0.
+        assert without_alloc["total_cash_revenue"] == 0.0
+        assert with_alloc["cash_surplus_deficit"] != without_alloc["cash_surplus_deficit"]
+
+    def test_org_row_consolidates_symmetrically_without_allocation(self, client):
+        """
+        Saat include_parent_allocation=False, pendapatan setoran di induk dan
+        beban alokasi di unit harus mati bersamaan (tetap konsolidasi 1:1).
+        """
+        pusat, cabang, unit = _setup_parent_chain(client, "CMP-ORGSYM")
+        income = client.get(
+            f"/organizations/{cabang}/simulation/summary-comparative"
+        ).json()
+        without_alloc = income["organization"]["summary_without_allocation"]
+        assert without_alloc["total_cash_revenue"] == 0.0
+
+        unit_expenses = client.get(
+            f"/organizations/{unit}/simulation/expenses?include_parent_allocation=false"
+        ).json()
+        unit_alloc_expense = sum(
+            r["total"] for r in unit_expenses["operational"]
+            if r["account_code"].startswith("ALLOC")
+        )
+        assert unit_alloc_expense == 0.0
+
+    def test_org_row_mode_auto_equals_final(self, client):
+        """
+        Toggle Mode (Otomatis vs Override UP/US) TIDAK mengubah baris induk —
+        pendapatan induk berasal dari setoran unit, bukan tarif UP/US unit,
+        sehingga auto == final. Ini mengunci perilaku yang sudah benar agar
+        tidak diubah keliru saat memperbaiki toggle alokasi.
+        """
+        pusat, cabang, unit = _setup_parent_chain(client, "CMP-ORGMODE")
+        resp = client.get(f"/organizations/{cabang}/simulation/summary-comparative")
+        data = resp.json()
+        with_alloc = data["organization"]["summary_with_allocation"]
+        assert with_alloc["total_cash_revenue_auto"] == with_alloc["total_cash_revenue"]
+        assert (
+            with_alloc["cash_surplus_deficit_auto"] == with_alloc["cash_surplus_deficit"]
+        )

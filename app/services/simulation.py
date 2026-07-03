@@ -13,6 +13,7 @@ from ..crud import parent_expense_allocation as crud_pea
 from ..crud import subsidy as crud_subsidy
 from ..crud import direct_income_override as crud_dio
 from ..crud import financial_investment as crud_fin_inv
+from ..crud import organization as org_crud
 from ..models.organization import Organization, OrgType
 from ..models.income_category import IncomeCalcMethod
 from ..schemas.simulation import (
@@ -24,7 +25,7 @@ from ..schemas.simulation import (
     DepreciationItem, DepreciationSummary,
     BosIncomeLineItem, BosIncomeSimulation,
     DirectIncomeItem, DirectIncomeSimulation,
-    BudgetSummary,
+    BudgetSummary, OrgSummaryRow, ComparativeSummary,
 )
 
 
@@ -1100,3 +1101,32 @@ def simulate_summary(
         expenses=expenses,
         depreciation=depreciation,
     )
+
+
+def simulate_comparative_summary(db: Session, org: Organization) -> ComparativeSummary:
+    """
+    Bangun ringkasan komparatif: organisasi (CABANG/PUSAT) vs semua UNIT di bawahnya.
+
+    Untuk PUSAT, unit yang dibandingkan mencakup unit dari SEMUA cabang (BFS penuh
+    lewat get_subtree), bukan hanya anak langsung.
+
+    Args:
+        db: Session database.
+        org: Organisasi akar (harus CABANG atau PUSAT — validasi org_type di router).
+
+    Returns:
+        ComparativeSummary berisi baris organisasi itu sendiri dan baris tiap unit
+        di bawahnya, masing-masing dengan dua varian summary (dengan/tanpa alokasi
+        ke induk).
+    """
+    def _row(o: Organization) -> OrgSummaryRow:
+        return OrgSummaryRow(
+            parent_id=o.parent_id,
+            summary_with_allocation=simulate_summary(db, o, include_parent_allocation=True),
+            summary_without_allocation=simulate_summary(db, o, include_parent_allocation=False),
+        )
+
+    subtree = org_crud.get_subtree(db, org.id)
+    units = [o for o in subtree if o.id != org.id and o.org_type == OrgType.UNIT]
+
+    return ComparativeSummary(organization=_row(org), units=[_row(u) for u in units])

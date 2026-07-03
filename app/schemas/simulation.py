@@ -211,3 +211,18 @@ class BudgetSummary(BaseModel):
     income: IncomeSimulation
     expenses: ExpenseSimulation
     depreciation: DepreciationSummary
+
+
+# ── Comparative Summary (Cabang/Pusat vs semua unit di bawahnya) ──────────────
+
+class OrgSummaryRow(BaseModel):
+    """Satu baris ringkasan untuk satu organisasi (induk atau unit turunan)."""
+    parent_id: int | None
+    summary_with_allocation: BudgetSummary
+    summary_without_allocation: BudgetSummary
+
+
+class ComparativeSummary(BaseModel):
+    """Ringkasan komparatif: organisasi induk (CABANG/PUSAT) vs seluruh unit di bawahnya."""
+    organization: OrgSummaryRow
+    units: list[OrgSummaryRow]

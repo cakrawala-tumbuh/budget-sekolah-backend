@@ -7,6 +7,18 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.34.0] - 2026-07-03
+
+### Ditambahkan
+- Endpoint baru `GET /organizations/{org_id}/simulation/summary-comparative`
+  (khusus CABANG/PUSAT, 422 untuk UNIT) yang mengembalikan ringkasan RAB
+  organisasi itu sendiri beserta seluruh UNIT di bawahnya (untuk PUSAT
+  mencakup unit lintas semua cabang). Setiap baris menyertakan dua varian
+  `BudgetSummary`: `summary_with_allocation` dan `summary_without_allocation`,
+  memakai fungsi `simulate_summary` dan `simulate_up`/`simulate_us` yang sudah
+  ada (mode override vs otomatis sudah tersedia sebagai pasangan field di
+  `BudgetSummary`, tidak perlu parameter baru).
+
 ## [1.33.0] - 2026-07-03
 
 ### Ditambahkan

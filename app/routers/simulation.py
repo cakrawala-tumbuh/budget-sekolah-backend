@@ -9,7 +9,7 @@ from ..services import simulation as svc
 from ..schemas.simulation import (
     UPSimulation, USSimulation, IncomeSimulation, ExpenseSimulation,
     AllocationSimulation, DepreciationSummary, BosIncomeSimulation,
-    DirectIncomeSimulation, BudgetSummary,
+    DirectIncomeSimulation, BudgetSummary, ComparativeSummary,
 )
 
 router = APIRouter(
@@ -104,3 +104,15 @@ def sim_direct_income(org_id: int, db: Session = Depends(get_db)):
 def sim_summary(org_id: int, include_parent_allocation: bool = True, db: Session = Depends(get_db)):
     org = _get_org_or_404(db, org_id)
     return svc.simulate_summary(db, org, include_parent_allocation)
+
+
+@router.get(
+    "/summary-comparative",
+    response_model=ComparativeSummary,
+    summary="Comparative summary: organization vs all units beneath it (CABANG/PUSAT only)",
+)
+def sim_summary_comparative(org_id: int, db: Session = Depends(get_db)):
+    org = _get_org_or_404(db, org_id)
+    if org.org_type == OrgType.UNIT:
+        raise HTTPException(status_code=422, detail="Comparative summary is only for CABANG/PUSAT organizations")
+    return svc.simulate_comparative_summary(db, org)

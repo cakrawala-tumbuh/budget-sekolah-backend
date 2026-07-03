@@ -838,3 +838,70 @@ class TestParentAllocationSeparation:
         assert pusat_items[0]["description"].startswith("[Alokasi Pusat]")
         assert abs(cabang_items[0]["total"] - 120_000_000.0) < 1.0
         assert abs(pusat_items[0]["total"] - 90_000_000.0) < 1.0
+
+
+class TestComparativeSummary:
+    """
+    /simulation/summary-comparative: organisasi (CABANG/PUSAT) vs semua unit
+    di bawahnya, dengan varian dengan/tanpa alokasi ke induk per baris.
+    """
+
+    def test_pusat_comparative_includes_all_units_across_branches(self, client):
+        pusat, cabang, unit = _setup_parent_chain(client, "CMP-PUSAT")
+        cabang2 = client.post("/organizations", json={
+            "code": "CBG-CMP2", "name": "Cabang CMP2",
+            "org_type": "CABANG", "parent_id": pusat,
+        }).json()["id"]
+        unit2 = client.post("/organizations", json={
+            "code": "SD-CMP2", "name": "SD CMP2",
+            "org_type": "UNIT", "parent_id": cabang2,
+        }).json()["id"]
+        client.put(f"/organizations/{unit2}/assumption", json={
+            "grade_1": 30, "grade_2": 0, "grade_3": 0, "grade_4": 0,
+            "grade_5": 0, "grade_6": 0,
+            "new_student_count": 30, "returning_student_count": 0, "staff_count": 3,
+        })
+
+        resp = client.get(f"/organizations/{pusat}/simulation/summary-comparative")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()
+        assert data["organization"]["summary_with_allocation"]["organization_id"] == pusat
+        unit_ids = {
+            u["summary_with_allocation"]["organization_id"] for u in data["units"]
+        }
+        assert unit_ids == {unit, unit2}
+
+    def test_cabang_comparative_includes_only_own_units(self, client):
+        pusat, cabang, unit = _setup_parent_chain(client, "CMP-CBG")
+        resp = client.get(f"/organizations/{cabang}/simulation/summary-comparative")
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()
+        unit_ids = {
+            u["summary_with_allocation"]["organization_id"] for u in data["units"]
+        }
+        assert unit_ids == {unit}
+
+    def test_unit_comparative_rejected(self, client):
+        pusat, cabang, unit = _setup_parent_chain(client, "CMP-UNIT")
+        resp = client.get(f"/organizations/{unit}/simulation/summary-comparative")
+        assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_unit_row_differs_with_and_without_allocation(self, client):
+        pusat, cabang, unit = _setup_parent_chain(client, "CMP-DIFF")
+        resp = client.get(f"/organizations/{cabang}/simulation/summary-comparative")
+        data = resp.json()
+        unit_row = next(
+            u for u in data["units"]
+            if u["summary_with_allocation"]["organization_id"] == unit
+        )
+        with_alloc = unit_row["summary_with_allocation"]
+        without_alloc = unit_row["summary_without_allocation"]
+        assert with_alloc["total_cash_expenses"] != without_alloc["total_cash_expenses"]
+
+    def test_org_row_present_alongside_units(self, client):
+        pusat, cabang, unit = _setup_parent_chain(client, "CMP-ORGROW")
+        resp = client.get(f"/organizations/{cabang}/simulation/summary-comparative")
+        data = resp.json()
+        org_row = data["organization"]["summary_with_allocation"]
+        assert org_row["organization_id"] == cabang
+        assert org_row["org_type"] == "CABANG"

@@ -158,6 +158,61 @@ class TestExpenseSimulation:
         assert abs(data["total"] - (data["total_operational"] + data["total_non_operational"])) < 0.01
 
 
+def _setup_parent_chain(client, suffix: str):
+    """
+    Bangun Pusat -> Cabang -> Unit dengan biaya di Cabang & Pusat yang
+    dialokasikan (UP & US) ke unit lewat parent-expense-allocations +
+    contribution-allocations. Dipakai bersama oleh test alokasi & test
+    include_parent_allocation=False.
+    """
+    pusat = client.post("/organizations", json={
+        "code": f"PST-XP-{suffix}", "name": f"Pusat {suffix}", "org_type": "PUSAT",
+    }).json()["id"]
+    cabang = client.post("/organizations", json={
+        "code": f"CBG-XP-{suffix}", "name": f"Cabang {suffix}",
+        "org_type": "CABANG", "parent_id": pusat,
+    }).json()["id"]
+    unit = client.post("/organizations", json={
+        "code": f"SD-XP-{suffix}", "name": f"SD {suffix}",
+        "org_type": "UNIT", "parent_id": cabang,
+    }).json()["id"]
+    client.put(f"/organizations/{unit}/assumption", json={
+        "grade_1": 60, "grade_2": 0, "grade_3": 0, "grade_4": 0,
+        "grade_5": 0, "grade_6": 0,
+        "new_student_count": 60, "returning_student_count": 0, "staff_count": 5,
+    })
+
+    cat_dev = _expense_cat_id(client, "5130.01")   # UP component
+    cat_gaji = _expense_cat_id(client, "5110.01")  # US component
+    # Biaya di Cabang: dev 24jt (UP), gaji 120jt (US)
+    client.post(f"/organizations/{cabang}/budget-entries", json={
+        "expense_category_id": cat_dev, "line_number": 1,
+        "description": "Dev Cabang", "foundation": 24_000_000.0, "bos": 0.0,
+    })
+    client.post(f"/organizations/{cabang}/budget-entries", json={
+        "expense_category_id": cat_gaji, "line_number": 1,
+        "description": "Gaji Cabang", "foundation": 120_000_000.0, "bos": 0.0,
+    })
+    # Biaya di Pusat: dev 30jt (UP), gaji 90jt (US)
+    client.post(f"/organizations/{pusat}/budget-entries", json={
+        "expense_category_id": cat_dev, "line_number": 1,
+        "description": "Dev Pusat", "foundation": 30_000_000.0, "bos": 0.0,
+    })
+    client.post(f"/organizations/{pusat}/budget-entries", json={
+        "expense_category_id": cat_gaji, "line_number": 1,
+        "description": "Gaji Pusat", "foundation": 90_000_000.0, "bos": 0.0,
+    })
+    for parent in (cabang, pusat):
+        client.post(f"/organizations/{parent}/parent-expense-allocations",
+                    json={"expense_category_id": cat_dev, "affects_up": True})
+        client.post(f"/organizations/{parent}/parent-expense-allocations",
+                    json={"expense_category_id": cat_gaji, "affects_up": False})
+        client.put(f"/organizations/{parent}/contribution-allocations", json={
+            "from_organization_id": unit, "total_students": 200, "new_students": 60,
+        })
+    return pusat, cabang, unit
+
+
 class TestUnitExpenseParentAllocation:
     """
     Beban Cabang/Pusat yang dialokasikan ke unit + depresiasi induk (investasi
@@ -165,52 +220,7 @@ class TestUnitExpenseParentAllocation:
     """
 
     def _setup(self, client, suffix: str):
-        pusat = client.post("/organizations", json={
-            "code": f"PST-XP-{suffix}", "name": f"Pusat {suffix}", "org_type": "PUSAT",
-        }).json()["id"]
-        cabang = client.post("/organizations", json={
-            "code": f"CBG-XP-{suffix}", "name": f"Cabang {suffix}",
-            "org_type": "CABANG", "parent_id": pusat,
-        }).json()["id"]
-        unit = client.post("/organizations", json={
-            "code": f"SD-XP-{suffix}", "name": f"SD {suffix}",
-            "org_type": "UNIT", "parent_id": cabang,
-        }).json()["id"]
-        client.put(f"/organizations/{unit}/assumption", json={
-            "grade_1": 60, "grade_2": 0, "grade_3": 0, "grade_4": 0,
-            "grade_5": 0, "grade_6": 0,
-            "new_student_count": 60, "returning_student_count": 0, "staff_count": 5,
-        })
-
-        cat_dev = _expense_cat_id(client, "5130.01")   # UP component
-        cat_gaji = _expense_cat_id(client, "5110.01")  # US component
-        # Biaya di Cabang: dev 24jt (UP), gaji 120jt (US)
-        client.post(f"/organizations/{cabang}/budget-entries", json={
-            "expense_category_id": cat_dev, "line_number": 1,
-            "description": "Dev Cabang", "foundation": 24_000_000.0, "bos": 0.0,
-        })
-        client.post(f"/organizations/{cabang}/budget-entries", json={
-            "expense_category_id": cat_gaji, "line_number": 1,
-            "description": "Gaji Cabang", "foundation": 120_000_000.0, "bos": 0.0,
-        })
-        # Biaya di Pusat: dev 30jt (UP), gaji 90jt (US)
-        client.post(f"/organizations/{pusat}/budget-entries", json={
-            "expense_category_id": cat_dev, "line_number": 1,
-            "description": "Dev Pusat", "foundation": 30_000_000.0, "bos": 0.0,
-        })
-        client.post(f"/organizations/{pusat}/budget-entries", json={
-            "expense_category_id": cat_gaji, "line_number": 1,
-            "description": "Gaji Pusat", "foundation": 90_000_000.0, "bos": 0.0,
-        })
-        for parent in (cabang, pusat):
-            client.post(f"/organizations/{parent}/parent-expense-allocations",
-                        json={"expense_category_id": cat_dev, "affects_up": True})
-            client.post(f"/organizations/{parent}/parent-expense-allocations",
-                        json={"expense_category_id": cat_gaji, "affects_up": False})
-            client.put(f"/organizations/{parent}/contribution-allocations", json={
-                "from_organization_id": unit, "total_students": 200, "new_students": 60,
-            })
-        return pusat, cabang, unit
+        return _setup_parent_chain(client, suffix)
 
     def test_allocated_parent_expenses_add_to_unit_expense(self, client):
         _, _, unit = self._setup(client, "A")
@@ -249,6 +259,85 @@ class TestUnitExpenseParentAllocation:
         data = client.get(f"/organizations/{org_id}/simulation/expenses").json()
         descs = [r["description"] for r in data["operational"]]
         assert not any(d.startswith("[Alokasi") for d in descs)
+
+
+class TestSimulationWithoutParentAllocation:
+    """
+    include_parent_allocation=False mematikan seluruh injeksi beban/komponen
+    Cabang & Pusat pada simulasi UP/US/Expenses unit — hasilnya murni biaya
+    unit sendiri, sementara default (tanpa param) tetap seperti semula.
+    """
+
+    def _setup(self, client, suffix: str):
+        return _setup_parent_chain(client, suffix)
+
+    def test_up_excludes_parent_allocation_when_flag_false(self, client):
+        _, _, unit = self._setup(client, "C")
+        with_alloc = client.get(f"/organizations/{unit}/simulation/up").json()
+        without_alloc = client.get(
+            f"/organizations/{unit}/simulation/up?include_parent_allocation=false"
+        ).json()
+
+        assert with_alloc["cabang_allocated_up_cost"] > 0
+        assert with_alloc["pusat_allocated_up_cost"] > 0
+
+        assert without_alloc["cabang_allocated_up_cost"] == 0.0
+        assert without_alloc["pusat_allocated_up_cost"] == 0.0
+        assert without_alloc["cabang_allocated_components"] == []
+        assert without_alloc["pusat_allocated_components"] == []
+        assert without_alloc["cabang_allocated_new_investment_dep"] == 0.0
+        assert without_alloc["pusat_allocated_new_investment_dep"] == 0.0
+        assert without_alloc["cabang_allocated_old_asset_dep"] == 0.0
+        assert without_alloc["pusat_allocated_old_asset_dep"] == 0.0
+        assert without_alloc["cabang_financial_investment_allocated"] == 0.0
+        assert without_alloc["pusat_financial_investment_allocated"] == 0.0
+        assert without_alloc["total_up_cost"] < with_alloc["total_up_cost"]
+        # 5130.01 Dev sendiri di unit = 36_000_000 (dari _setup_unit tidak
+        # dipakai di sini; unit ini hanya punya biaya dari alokasi induk).
+        assert without_alloc["total_up_cost"] == 0.0
+
+    def test_us_excludes_parent_allocation_when_flag_false(self, client):
+        _, _, unit = self._setup(client, "D")
+        with_alloc = client.get(f"/organizations/{unit}/simulation/us").json()
+        without_alloc = client.get(
+            f"/organizations/{unit}/simulation/us?include_parent_allocation=false"
+        ).json()
+
+        assert with_alloc["cabang_allocated_us_cost"] > 0
+        assert with_alloc["pusat_allocated_us_cost"] > 0
+
+        assert without_alloc["cabang_allocated_us_cost"] == 0.0
+        assert without_alloc["pusat_allocated_us_cost"] == 0.0
+        assert without_alloc["cabang_allocated_components"] == []
+        assert without_alloc["pusat_allocated_components"] == []
+        assert without_alloc["total_us_cost"] == 0.0
+        assert without_alloc["total_us_cost"] < with_alloc["total_us_cost"]
+
+    def test_expenses_excludes_parent_allocation_when_flag_false(self, client):
+        _, _, unit = self._setup(client, "E")
+        with_alloc = client.get(f"/organizations/{unit}/simulation/expenses").json()
+        without_alloc = client.get(
+            f"/organizations/{unit}/simulation/expenses?include_parent_allocation=false"
+        ).json()
+
+        alloc_descs = [
+            r["description"] for r in with_alloc["operational"]
+            if r["description"].startswith("[Alokasi")
+        ]
+        assert alloc_descs  # sanity: default masih menyuntikkan alokasi
+
+        without_descs = [r["description"] for r in without_alloc["operational"]]
+        without_codes = [r["account_code"] for r in without_alloc["operational"]]
+        assert not any(d.startswith("[Alokasi") for d in without_descs)
+        assert not any(c.startswith("ALLOC:") for c in without_codes)
+        assert without_alloc["total_operational"] < with_alloc["total_operational"]
+
+    def test_default_still_includes_allocation(self, client):
+        """Regresi: tanpa query param, perilaku lama (dengan alokasi) tidak berubah."""
+        _, _, unit = self._setup(client, "F")
+        data = client.get(f"/organizations/{unit}/simulation/up").json()
+        assert data["cabang_allocated_up_cost"] > 0
+        assert data["pusat_allocated_up_cost"] > 0
 
 
 class TestDepreciationSimulation:

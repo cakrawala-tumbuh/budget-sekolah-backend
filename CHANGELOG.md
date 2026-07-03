@@ -7,6 +7,17 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-07-03
+
+### Ditambahkan
+- Parameter query `include_parent_allocation` (default `true`) pada endpoint
+  simulasi `up`, `us`, `expenses`, `income`, dan `summary`. Saat diset
+  `false`, simulasi UNIT mengabaikan seluruh beban yang dialokasikan dari
+  Cabang/Pusat (komponen biaya, depresiasi investasi baru & aset lama,
+  investasi keuangan), sehingga menghasilkan tarif UP/US dan total biaya
+  yang murni berasal dari data unit itu sendiri. Perilaku default (tanpa
+  parameter) tidak berubah.
+
 ## [1.32.0] - 2026-06-17
 
 ### Ditambahkan

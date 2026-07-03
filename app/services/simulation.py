@@ -339,7 +339,9 @@ def _aggregate_entries(entries) -> dict:
     return result
 
 
-def simulate_up(db: Session, org: Organization) -> UPSimulation:
+def simulate_up(
+    db: Session, org: Organization, include_parent_allocation: bool = True
+) -> UPSimulation:
     entries = crud_entry.list_by_org(db, org.id)
     assumption = crud_assumption.get(db, org.id)
     investments = crud_inv.list_by_org(db, org.id)
@@ -361,8 +363,28 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
             ))
             total_own_up_cost += total
 
-    # Komponen UP yang dialokasikan dari induk, dipisahkan Cabang vs Pusat
-    parent_alloc = _get_parent_allocated_components(db, org)
+    # Komponen UP yang dialokasikan dari induk, dipisahkan Cabang vs Pusat.
+    # Bila include_parent_allocation=False, simulasi murni biaya unit sendiri.
+    if include_parent_allocation:
+        parent_alloc = _get_parent_allocated_components(db, org)
+        cabang_allocated_new_investment_dep, pusat_allocated_new_investment_dep = (
+            _get_parent_allocated_new_investment_dep(db, org)
+        )
+        cabang_allocated_old_asset_dep, pusat_allocated_old_asset_dep = (
+            _get_parent_allocated_old_asset_dep(db, org)
+        )
+        cabang_financial_investment_allocated, pusat_financial_investment_allocated = (
+            _get_parent_allocated_financial_investment(db, org)
+        )
+    else:
+        parent_alloc = _ParentAllocation()
+        cabang_allocated_new_investment_dep = 0.0
+        pusat_allocated_new_investment_dep = 0.0
+        cabang_allocated_old_asset_dep = 0.0
+        pusat_allocated_old_asset_dep = 0.0
+        cabang_financial_investment_allocated = 0.0
+        pusat_financial_investment_allocated = 0.0
+
     cabang_allocated_up_cost = parent_alloc.total_up_cabang
     pusat_allocated_up_cost = parent_alloc.total_up_pusat
     total_up_cost = total_own_up_cost + cabang_allocated_up_cost + pusat_allocated_up_cost
@@ -371,18 +393,6 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
     fiscal_year = _fiscal_year(settings.budget_year)
     old_assets = crud_misc.list_dep_by_org(db, org.id)
     old_asset_dep = sum(old.dep_current_year(fiscal_year) for old in old_assets)
-    # Depresiasi tahun berjalan investasi baru & aset lama di Cabang/Pusat
-    # dialokasikan ke unit, menambah beban (alokasi) UP unit — dipisahkan per
-    # jenis induk.
-    cabang_allocated_new_investment_dep, pusat_allocated_new_investment_dep = (
-        _get_parent_allocated_new_investment_dep(db, org)
-    )
-    cabang_allocated_old_asset_dep, pusat_allocated_old_asset_dep = (
-        _get_parent_allocated_old_asset_dep(db, org)
-    )
-    cabang_financial_investment_allocated, pusat_financial_investment_allocated = (
-        _get_parent_allocated_financial_investment(db, org)
-    )
     total_dep = (
         new_investment_dep + old_asset_dep
         + cabang_allocated_new_investment_dep + pusat_allocated_new_investment_dep
@@ -426,7 +436,9 @@ def simulate_up(db: Session, org: Organization) -> UPSimulation:
     )
 
 
-def simulate_us(db: Session, org: Organization) -> USSimulation:
+def simulate_us(
+    db: Session, org: Organization, include_parent_allocation: bool = True
+) -> USSimulation:
     entries = crud_entry.list_by_org(db, org.id)
     assumption = crud_assumption.get(db, org.id)
 
@@ -449,8 +461,12 @@ def simulate_us(db: Session, org: Organization) -> USSimulation:
             ))
             total_own_us_cost += total
 
-    # Komponen US yang dialokasikan dari induk, dipisahkan Cabang vs Pusat
-    parent_alloc = _get_parent_allocated_components(db, org)
+    # Komponen US yang dialokasikan dari induk, dipisahkan Cabang vs Pusat.
+    # Bila include_parent_allocation=False, simulasi murni biaya unit sendiri.
+    if include_parent_allocation:
+        parent_alloc = _get_parent_allocated_components(db, org)
+    else:
+        parent_alloc = _ParentAllocation()
     cabang_allocated_us_cost = parent_alloc.total_us_cabang
     pusat_allocated_us_cost = parent_alloc.total_us_pusat
     total_us_cost = total_own_us_cost + cabang_allocated_us_cost + pusat_allocated_us_cost
@@ -479,7 +495,9 @@ def simulate_us(db: Session, org: Organization) -> USSimulation:
     )
 
 
-def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
+def simulate_income(
+    db: Session, org: Organization, include_parent_allocation: bool = True
+) -> IncomeSimulation:
     """
     Hitung total pendapatan simulasi untuk suatu organisasi.
 
@@ -491,6 +509,8 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
     Args:
         db: Database session.
         org: Organisasi yang disimulasikan.
+        include_parent_allocation: Sertakan beban alokasi induk (Cabang/Pusat)
+            pada UP/US unit. Hanya berlaku untuk org UNIT.
 
     Returns:
         IncomeSimulation dengan daftar item pendapatan dan total.
@@ -500,7 +520,7 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
     total_auto = 0.0
 
     if org.org_type == OrgType.UNIT:
-        up_sim = simulate_up(db, org)
+        up_sim = simulate_up(db, org, include_parent_allocation)
         items.append(IncomeItem(
             account_code="4110.01", description="Uang Pangkal (UP)",
             total=up_sim.total_up_revenue, auto_total=up_sim.auto_up_revenue,
@@ -508,7 +528,7 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
         total += up_sim.total_up_revenue
         total_auto += up_sim.auto_up_revenue
 
-        us_sim = simulate_us(db, org)
+        us_sim = simulate_us(db, org, include_parent_allocation)
         items.append(IncomeItem(
             account_code="4120.01", description="Uang Sekolah (US)",
             total=us_sim.total_us_revenue, auto_total=us_sim.auto_us_revenue,
@@ -648,7 +668,9 @@ def simulate_income(db: Session, org: Organization) -> IncomeSimulation:
     return IncomeSimulation(items=items, total=total, total_auto=total_auto)
 
 
-def simulate_expenses(db: Session, org: Organization) -> ExpenseSimulation:
+def simulate_expenses(
+    db: Session, org: Organization, include_parent_allocation: bool = True
+) -> ExpenseSimulation:
     entries = crud_entry.list_by_org(db, org.id)
     agg = _aggregate_entries(entries)
 
@@ -713,7 +735,9 @@ def simulate_expenses(db: Session, org: Organization) -> ExpenseSimulation:
     #   1. Seluruh beban Cabang & Pusat yang dialokasikan ke unit (UP & US).
     #   2. Depresiasi investasi baru tahun berjalan Cabang & Pusat (alokasi).
     #   3. Depresiasi aset lama tahun berjalan Cabang & Pusat (alokasi).
-    if org.org_type == OrgType.UNIT:
+    # Bila include_parent_allocation=False, seluruh injeksi ini dilewati —
+    # simulasi biaya murni milik unit sendiri.
+    if org.org_type == OrgType.UNIT and include_parent_allocation:
         parent_alloc = _get_parent_allocated_components(db, org)
         for comp in (
             parent_alloc.up_cabang + parent_alloc.up_pusat
@@ -1027,9 +1051,11 @@ def simulate_direct_income(db: Session, org: Organization) -> DirectIncomeSimula
     return DirectIncomeSimulation(items=items, total=total, total_auto=total_auto)
 
 
-def simulate_summary(db: Session, org: Organization) -> BudgetSummary:
-    income = simulate_income(db, org)
-    expenses = simulate_expenses(db, org)
+def simulate_summary(
+    db: Session, org: Organization, include_parent_allocation: bool = True
+) -> BudgetSummary:
+    income = simulate_income(db, org, include_parent_allocation)
+    expenses = simulate_expenses(db, org, include_parent_allocation)
     depreciation = simulate_depreciation(db, org)
     investments = crud_inv.list_by_org(db, org.id)
 

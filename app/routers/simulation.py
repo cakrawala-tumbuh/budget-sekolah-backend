@@ -27,31 +27,31 @@ def _get_org_or_404(db: Session, org_id: int):
 
 
 @router.get("/up", response_model=UPSimulation, summary="UP (Enrollment Fee) component simulation")
-def sim_up(org_id: int, db: Session = Depends(get_db)):
+def sim_up(org_id: int, include_parent_allocation: bool = True, db: Session = Depends(get_db)):
     org = _get_org_or_404(db, org_id)
     if org.org_type != OrgType.UNIT:
         raise HTTPException(status_code=422, detail="UP simulation is only for UNIT organizations")
-    return svc.simulate_up(db, org)
+    return svc.simulate_up(db, org, include_parent_allocation)
 
 
 @router.get("/us", response_model=USSimulation, summary="US (Tuition Fee) component simulation")
-def sim_us(org_id: int, db: Session = Depends(get_db)):
+def sim_us(org_id: int, include_parent_allocation: bool = True, db: Session = Depends(get_db)):
     org = _get_org_or_404(db, org_id)
     if org.org_type != OrgType.UNIT:
         raise HTTPException(status_code=422, detail="US simulation is only for UNIT organizations")
-    return svc.simulate_us(db, org)
+    return svc.simulate_us(db, org, include_parent_allocation)
 
 
 @router.get("/income", response_model=IncomeSimulation, summary="Total income simulation")
-def sim_income(org_id: int, db: Session = Depends(get_db)):
+def sim_income(org_id: int, include_parent_allocation: bool = True, db: Session = Depends(get_db)):
     org = _get_org_or_404(db, org_id)
-    return svc.simulate_income(db, org)
+    return svc.simulate_income(db, org, include_parent_allocation)
 
 
 @router.get("/expenses", response_model=ExpenseSimulation, summary="Total expenses simulation")
-def sim_expenses(org_id: int, db: Session = Depends(get_db)):
+def sim_expenses(org_id: int, include_parent_allocation: bool = True, db: Session = Depends(get_db)):
     org = _get_org_or_404(db, org_id)
-    return svc.simulate_expenses(db, org)
+    return svc.simulate_expenses(db, org, include_parent_allocation)
 
 
 @router.get(
@@ -101,6 +101,6 @@ def sim_direct_income(org_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/summary", response_model=BudgetSummary, summary="Full RAB budget summary")
-def sim_summary(org_id: int, db: Session = Depends(get_db)):
+def sim_summary(org_id: int, include_parent_allocation: bool = True, db: Session = Depends(get_db)):
     org = _get_org_or_404(db, org_id)
-    return svc.simulate_summary(db, org)
+    return svc.simulate_summary(db, org, include_parent_allocation)

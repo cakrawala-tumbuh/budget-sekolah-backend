@@ -191,7 +191,9 @@ class BudgetSummary(BaseModel):
     total_cash_revenue: float       # final (override) revenue
     total_cash_revenue_auto: float  # revenue using auto-calculated UP/US
     total_cash_expenses: float      # budget entries (5xxx)
-    total_investments: float        # investment purchases (1330)
+    total_investments: float             # gabungan: aset fisik + investasi keuangan
+    total_physical_investments: float    # pembelian aset tetap (1330), didepresiasi
+    total_financial_investments: float   # investasi keuangan (CABANG/PUSAT), tidak didepresiasi
     cash_surplus_deficit: float     # revenue - cash_expenses - investments
     cash_surplus_deficit_auto: float  # auto revenue - cash_expenses - investments
 

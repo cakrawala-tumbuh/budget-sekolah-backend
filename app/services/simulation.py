@@ -1070,10 +1070,9 @@ def simulate_summary(
     total_cash_revenue_auto = income.total_auto
     total_cash_expenses = expenses.total
     financial_investments = crud_fin_inv.list_by_org(db, org.id)
-    total_investments = (
-        sum(inv.purchase_price for inv in investments)
-        + sum(fi.amount for fi in financial_investments)
-    )
+    total_physical_investments = sum(inv.purchase_price for inv in investments)
+    total_financial_investments = sum(fi.amount for fi in financial_investments)
+    total_investments = total_physical_investments + total_financial_investments
     cash_surplus_deficit = total_cash_revenue - total_cash_expenses - total_investments
     cash_surplus_deficit_auto = total_cash_revenue_auto - total_cash_expenses - total_investments
     # Saldo kas & setara kas: awal (dari master organisasi) + surplus/defisit kas
@@ -1093,6 +1092,8 @@ def simulate_summary(
         total_cash_revenue_auto=total_cash_revenue_auto,
         total_cash_expenses=total_cash_expenses,
         total_investments=total_investments,
+        total_physical_investments=total_physical_investments,
+        total_financial_investments=total_financial_investments,
         cash_surplus_deficit=cash_surplus_deficit,
         cash_surplus_deficit_auto=cash_surplus_deficit_auto,
         opening_cash_balance=opening_cash_balance,

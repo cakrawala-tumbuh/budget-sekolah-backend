@@ -7,6 +7,16 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+### Ditambahkan
+- Field `total_physical_investments` dan `total_financial_investments` pada
+  response `BudgetSummary` (`GET /organizations/{org_id}/simulation/summary`),
+  memecah `total_investments` — yang selama ini menggabungkan pembelian aset
+  tetap (`Investment.purchase_price`) dan investasi keuangan CABANG/PUSAT
+  (`FinancialInvestment.amount`) — menjadi dua komponen terpisah. Field
+  `total_investments` dipertahankan sebagai gabungan untuk backward
+  compatibility; rumus `cash_surplus_deficit`/`cash_surplus_deficit_auto`
+  tidak berubah.
+
 ## [1.34.1] - 2026-07-03
 
 ### Diperbaiki

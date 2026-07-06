@@ -397,6 +397,26 @@ class TestBudgetSummary:
         expected_accrual = data["total_cash_expenses"] + data["depreciation"]["total_current_year_dep"]
         assert abs(data["total_accrual_expenses"] - expected_accrual) < 0.01
 
+    def test_summary_splits_physical_and_financial_investments(self, client):
+        # CABANG dapat memiliki investasi fisik sekaligus investasi keuangan
+        resp = client.post("/organizations", json={
+            "code": "CBG-INV-SPLIT", "name": "Cabang Inv Split", "org_type": "CABANG",
+        })
+        assert resp.status_code == status.HTTP_201_CREATED
+        org_id = resp.json()["id"]
+        inv_cat_id = _invest_cat_id(client, "1330.02")
+        client.post(f"/organizations/{org_id}/investments", json={
+            "investment_category_id": inv_cat_id, "asset_name": "Laptop",
+            "purchase_price": 12_000_000.0, "useful_life": 4, "start_month": 7,
+        })
+        client.post(f"/organizations/{org_id}/financial-investments", json={
+            "instrument_type": "DEPOSITO", "name": "Deposito BCA", "amount": 8_000_000.0,
+        })
+        data = client.get(f"/organizations/{org_id}/simulation/summary").json()
+        assert abs(data["total_physical_investments"] - 12_000_000.0) < 0.01
+        assert abs(data["total_financial_investments"] - 8_000_000.0) < 0.01
+        assert abs(data["total_investments"] - 20_000_000.0) < 0.01
+
     def test_ending_cash_balance_uses_opening_saldo(self, client):
         org_id = _setup_unit(client, "SD-SIM-SALDO")
         # Set saldo kas & setara kas awal lewat update organisasi

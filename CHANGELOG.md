@@ -7,6 +7,8 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [1.35.0] - 2026-07-07
+
 ### Ditambahkan
 - Field `total_physical_investments` dan `total_financial_investments` pada
   response `BudgetSummary` (`GET /organizations/{org_id}/simulation/summary`),

@@ -57,35 +57,35 @@ def get_code_to_id_map(db: Session) -> dict[str, int]:
 
 _DEFAULT_INCOME_CATEGORIES: list[dict] = [
     # Simulated (UP/US/From Expense)
-    {"code": "4110.01", "label": "Uang Pangkal (UP)", "calc_method": IncomeCalcMethod.SIMULATED_UP, "sort_order": 10},
-    {"code": "4120.01", "label": "Uang Sekolah (US)", "calc_method": IncomeCalcMethod.SIMULATED_US, "sort_order": 20},
-    {"code": "4120.02", "label": "Uang Komputer", "calc_method": IncomeCalcMethod.FROM_EXPENSE, "sort_order": 21},
-    {"code": "4130.01", "label": "Pendapatan Ulangan Umum", "calc_method": IncomeCalcMethod.FROM_EXPENSE, "sort_order": 30},
-    {"code": "4130.02", "label": "Pendapatan UAS/UAN", "calc_method": IncomeCalcMethod.FROM_EXPENSE, "sort_order": 31},
-    {"code": "4140.01", "label": "Pendapatan PSB", "calc_method": IncomeCalcMethod.FROM_EXPENSE, "sort_order": 40},
-    {"code": "4160.01", "label": "Kegiatan Siswa", "calc_method": IncomeCalcMethod.GRADE_BASED, "sort_order": 50},
+    {"code": "4110.01", "label": "Uang Pangkal (UP)", "is_operational": True, "calc_method": IncomeCalcMethod.SIMULATED_UP, "sort_order": 10},
+    {"code": "4120.01", "label": "Uang Sekolah (US)", "is_operational": True, "calc_method": IncomeCalcMethod.SIMULATED_US, "sort_order": 20},
+    {"code": "4120.02", "label": "Uang Komputer", "is_operational": True, "calc_method": IncomeCalcMethod.FROM_EXPENSE, "sort_order": 21},
+    {"code": "4130.01", "label": "Pendapatan Ulangan Umum", "is_operational": True, "calc_method": IncomeCalcMethod.FROM_EXPENSE, "sort_order": 30},
+    {"code": "4130.02", "label": "Pendapatan UAS/UAN", "is_operational": True, "calc_method": IncomeCalcMethod.FROM_EXPENSE, "sort_order": 31},
+    {"code": "4140.01", "label": "Pendapatan PSB", "is_operational": True, "calc_method": IncomeCalcMethod.FROM_EXPENSE, "sort_order": 40},
+    {"code": "4160.01", "label": "Kegiatan Siswa", "is_operational": True, "calc_method": IncomeCalcMethod.GRADE_BASED, "sort_order": 50},
     # Manual
-    {"code": "4120.03", "label": "Uang Mandarin", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 22},
-    {"code": "4120.04", "label": "Uang Perpustakaan", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 23},
-    {"code": "4120.05", "label": "Denda Uang Sekolah", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 24},
-    {"code": "4120.06", "label": "Pendapatan Day Care/Student Care", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 25},
-    {"code": "4160.02", "label": "Kegiatan Lain", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 51},
-    {"code": "4160.03", "label": "Pendapatan Uang Student Care", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 52},
-    {"code": "4500.01", "label": "Pendapatan Non Operasional", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 60},
-    {"code": "4530.01", "label": "Pendapatan Riso", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 61},
-    {"code": "4530.02", "label": "Pendapatan Koperasi", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 62},
-    {"code": "4510.01", "label": "Dana BOS", "calc_method": IncomeCalcMethod.SUM_FROM_BOS, "sort_order": 70},
-    {"code": "4510.02", "label": "Dana BOP", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 71},
-    {"code": "4510.03", "label": "Dana PBOS", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 72},
-    {"code": "4610.01", "label": "Sumbangan Pembangunan", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 80},
-    {"code": "4610.02", "label": "Sumbangan Lain", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 81},
-    {"code": "4620.01", "label": "Pendapatan Lain-lain", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 90},
+    {"code": "4120.03", "label": "Uang Mandarin", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 22},
+    {"code": "4120.04", "label": "Uang Perpustakaan", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 23},
+    {"code": "4120.05", "label": "Denda Uang Sekolah", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 24},
+    {"code": "4120.06", "label": "Pendapatan Day Care/Student Care", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 25},
+    {"code": "4160.02", "label": "Kegiatan Lain", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 51},
+    {"code": "4160.03", "label": "Pendapatan Uang Student Care", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 52},
+    {"code": "4500.01", "label": "Pendapatan Non Operasional", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 60},
+    {"code": "4530.01", "label": "Pendapatan Riso", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 61},
+    {"code": "4530.02", "label": "Pendapatan Koperasi", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 62},
+    {"code": "4510.01", "label": "Dana BOS", "is_operational": True, "calc_method": IncomeCalcMethod.SUM_FROM_BOS, "sort_order": 70},
+    {"code": "4510.02", "label": "Dana BOP", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 71},
+    {"code": "4510.03", "label": "Dana PBOS", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 72},
+    {"code": "4610.01", "label": "Sumbangan Pembangunan", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 80},
+    {"code": "4610.02", "label": "Sumbangan Lain", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 81},
+    {"code": "4620.01", "label": "Pendapatan Lain-lain", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 90},
     # Kontribusi diterima (CABANG / PUSAT)
-    {"code": "4630.01", "label": "Kontribusi UP Diterima", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 100},
-    {"code": "4630.02", "label": "Kontribusi US Diterima", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 101},
-    {"code": "4630.05", "label": "Dana Pembangunan Diterima", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 102},
-    {"code": "4630.06", "label": "Cadangan Karya Defisit Diterima", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 103},
-    {"code": "4630.07", "label": "Subsidi dari PUSAT", "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 104},
+    {"code": "4630.01", "label": "Kontribusi UP Diterima", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 100},
+    {"code": "4630.02", "label": "Kontribusi US Diterima", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 101},
+    {"code": "4630.05", "label": "Dana Pembangunan Diterima", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 102},
+    {"code": "4630.06", "label": "Cadangan Karya Defisit Diterima", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 103},
+    {"code": "4630.07", "label": "Subsidi dari PUSAT", "is_operational": True, "calc_method": IncomeCalcMethod.MANUAL, "sort_order": 104},
 ]
 
 
@@ -93,6 +93,9 @@ def seed_defaults(db: Session) -> int:
     """
     Semai kategori pendapatan standar. Bersifat additive — hanya menyisipkan
     kode yang belum ada, tidak menghapus atau mengubah data yang sudah ada.
+
+    Seluruh kategori bawaan disemai dengan ``is_operational=True``, konsisten
+    dengan nilai awal migrasi ringan kolom tersebut.
 
     Returns:
         Jumlah baris yang disisipkan.

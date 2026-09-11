@@ -7,6 +7,17 @@ dan proyek ini menganut [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+### Ditambahkan
+- Kolom `IncomeCategory.is_operational` (padanan `ExpenseCategory.is_operational`),
+  dipaparkan di `GET`/`PUT /income-categories/{id}` dan di setiap `IncomeItem`
+  hasil `GET /organizations/{org_id}/simulation/income`. Membelah pendapatan
+  operasional/non-operasional kini berasal dari data kategori, bukan dari
+  menguraikan segmen pertama `account_code` — perbaikan atas kategori berkode
+  non-numerik (mis. `TEMP.001`) yang sebelumnya tidak masuk kelompok mana pun.
+  Migrasi ringan menetapkan seluruh kategori yang sudah ada sebagai
+  operasional (`DEFAULT 1`); nilai per kategori disetel kemudian lewat MCP.
+  Tidak mengubah nilai `total`/`total_auto` yang dihitung simulasi.
+
 ## [1.35.0] - 2026-07-07
 
 ### Ditambahkan

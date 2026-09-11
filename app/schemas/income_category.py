@@ -9,6 +9,7 @@ from ..models.income_category import IncomeCalcMethod
 class IncomeCategoryBase(BaseModel):
     code: str
     label: str
+    is_operational: bool = True
     calc_method: IncomeCalcMethod = IncomeCalcMethod.MANUAL
     sort_order: int = 0
 
@@ -27,6 +28,7 @@ class IncomeCategoryCreate(IncomeCategoryBase):
 
 class IncomeCategoryUpdate(BaseModel):
     label: str | None = None
+    is_operational: bool | None = None
     calc_method: IncomeCalcMethod | None = None
     sort_order: int | None = None
 

@@ -10,11 +10,16 @@ Cara kalkulasi ditentukan oleh `calc_method`:
   FROM_EXPENSE    → dijumlahkan dari BudgetEntry yang maps ke kategori ini
   GRADE_BASED     → dihitung dari BudgetEntryGradeAllocation (per grade)
   SUM_FROM_BOS    → dijumlahkan dari kolom `bos` seluruh BudgetEntry organisasi
+
+Kolom `is_operational` membelah pendapatan menjadi operasional/non-operasional
+langsung dari data kategori — padanan `ExpenseCategory.is_operational` di sisi
+biaya — sehingga konsumen API (laporan RAB) tidak perlu menebak dari segmen
+pertama `code`.
 """
 from datetime import datetime, timezone
 from enum import Enum as PyEnum
 
-from sqlalchemy import DateTime, Enum, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
@@ -43,6 +48,10 @@ class IncomeCategory(Base):
     # Kode akun, e.g. "4110.01"
     code: Mapped[str] = mapped_column(String(20), nullable=False, unique=True, index=True)
     label: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    # True = pendapatan operasional, False = non-operasional. Nama, tipe, dan
+    # default sengaja identik dengan ExpenseCategory.is_operational.
+    is_operational: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Cara kalkulasi pendapatan ini
     calc_method: Mapped[IncomeCalcMethod] = mapped_column(

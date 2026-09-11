@@ -13,6 +13,7 @@ from ..crud import parent_expense_allocation as crud_pea
 from ..crud import subsidy as crud_subsidy
 from ..crud import direct_income_override as crud_dio
 from ..crud import financial_investment as crud_fin_inv
+from ..crud import income_category as crud_income_cat
 from ..crud import organization as org_crud
 from ..models.organization import Organization, OrgType
 from ..models.income_category import IncomeCalcMethod
@@ -517,17 +518,42 @@ def simulate_income(
             membukukan beban alokasinya (lihat simulate_expenses).
 
     Returns:
-        IncomeSimulation dengan daftar item pendapatan dan total.
+        IncomeSimulation dengan daftar item pendapatan dan total. Setiap
+        ``IncomeItem`` membawa ``is_operational`` yang diambil dari kategori
+        pendapatan sumbernya, sehingga konsumen (laporan RAB) dapat membelah
+        operasional/non-operasional dari data — bukan dari menguraikan
+        ``account_code``.
     """
     items = []
     total = 0.0
     total_auto = 0.0
+
+    # Peta code -> IncomeCategory, dipakai untuk melampirkan is_operational pada
+    # item yang account_code-nya hardcode (UP/US/kontribusi) tanpa objek kategori
+    # sumber yang langsung tersedia di titik konstruksinya.
+    income_categories_by_code = {c.code: c for c in crud_income_cat.list_all(db)}
+
+    def _is_operational(code: str) -> bool:
+        """
+        Ambil ``is_operational`` kategori pendapatan berkode ``code``.
+
+        Args:
+            code: Kode akun kategori pendapatan (mis. ``"4110.01"``).
+
+        Returns:
+            ``is_operational`` kategori bila ditemukan; ``True`` bila kode
+            tidak dikenali di ``income_categories_by_code`` (default aman,
+            konsisten dengan default kolom & migrasinya).
+        """
+        cat = income_categories_by_code.get(code)
+        return cat.is_operational if cat is not None else True
 
     if org.org_type == OrgType.UNIT:
         up_sim = simulate_up(db, org, include_parent_allocation)
         items.append(IncomeItem(
             account_code="4110.01", description="Uang Pangkal (UP)",
             total=up_sim.total_up_revenue, auto_total=up_sim.auto_up_revenue,
+            is_operational=_is_operational("4110.01"),
         ))
         total += up_sim.total_up_revenue
         total_auto += up_sim.auto_up_revenue
@@ -536,6 +562,7 @@ def simulate_income(
         items.append(IncomeItem(
             account_code="4120.01", description="Uang Sekolah (US)",
             total=us_sim.total_us_revenue, auto_total=us_sim.auto_us_revenue,
+            is_operational=_is_operational("4120.01"),
         ))
         total += us_sim.total_us_revenue
         total_auto += us_sim.auto_us_revenue
@@ -566,17 +593,22 @@ def simulate_income(
                 auto_amount = grade_total if grade_total else auto_amount
             override = overrides_map.get(cid)
             final_amount = override.override_amount if override is not None else auto_amount
+            # Kategori sumber: IncomeCategory tujuan bila ada mapping direct-income,
+            # jika tidak jatuh balik ke penanda ExpenseCategory itu sendiri.
+            item_is_operational = (
+                income_cat.is_operational if income_cat is not None else cat.is_operational
+            )
             items.append(IncomeItem(
                 account_code=income_code,
                 description=income_cat.label if income_cat else cat.label,
                 total=final_amount,
                 auto_total=auto_amount,
+                is_operational=item_is_operational,
             ))
             total += final_amount
             total_auto += auto_amount
 
         # SUM_FROM_BOS: jumlahkan kolom bos dari seluruh BudgetEntry + Investment
-        from ..crud import income_category as crud_income_cat
         bos_categories = [
             c for c in crud_income_cat.list_all(db)
             if c.calc_method == IncomeCalcMethod.SUM_FROM_BOS
@@ -589,21 +621,32 @@ def simulate_income(
             )
             if total_bos:
                 for bos_cat in bos_categories:
-                    items.append(IncomeItem(account_code=bos_cat.code, description=bos_cat.label, total=total_bos, auto_total=total_bos))
+                    items.append(IncomeItem(
+                        account_code=bos_cat.code, description=bos_cat.label,
+                        total=total_bos, auto_total=total_bos,
+                        is_operational=bos_cat.is_operational,
+                    ))
                     total += total_bos
                     total_auto += total_bos
 
         income_entries = crud_income.list_by_org(db, org.id)
-        income_agg = defaultdict(lambda: {"total": 0.0, "code": "", "label": ""})
+        income_agg = defaultdict(
+            lambda: {"total": 0.0, "code": "", "label": "", "is_operational": True}
+        )
         for ie in income_entries:
             cid = ie.income_category_id
             income_agg[cid]["total"] += ie.amount or 0.0
             if ie.income_category:
                 income_agg[cid]["code"] = ie.income_category.code
                 income_agg[cid]["label"] = ie.income_category.label
+                income_agg[cid]["is_operational"] = ie.income_category.is_operational
         for cid, data in sorted(income_agg.items()):
             if data["total"]:
-                items.append(IncomeItem(account_code=data["code"], description=data["label"] or data["code"], total=data["total"], auto_total=data["total"]))
+                items.append(IncomeItem(
+                    account_code=data["code"], description=data["label"] or data["code"],
+                    total=data["total"], auto_total=data["total"],
+                    is_operational=data["is_operational"],
+                ))
                 total += data["total"]
                 total_auto += data["total"]
 
@@ -625,25 +668,40 @@ def simulate_income(
                 setoran_up, setoran_us = _unit_setoran_to_ancestor(db, from_org, org)
                 name = from_org.name
                 if setoran_up:
-                    items.append(IncomeItem(account_code="4630.01", description=f"Kontribusi UP dari {name}", total=setoran_up, auto_total=setoran_up))
+                    items.append(IncomeItem(
+                        account_code="4630.01", description=f"Kontribusi UP dari {name}",
+                        total=setoran_up, auto_total=setoran_up,
+                        is_operational=_is_operational("4630.01"),
+                    ))
                     total += setoran_up
                     total_auto += setoran_up
                 if setoran_us:
-                    items.append(IncomeItem(account_code="4630.02", description=f"Kontribusi US dari {name}", total=setoran_us, auto_total=setoran_us))
+                    items.append(IncomeItem(
+                        account_code="4630.02", description=f"Kontribusi US dari {name}",
+                        total=setoran_us, auto_total=setoran_us,
+                        is_operational=_is_operational("4630.02"),
+                    ))
                     total += setoran_us
                     total_auto += setoran_us
 
         income_entries = crud_income.list_by_org(db, org.id)
-        income_agg = defaultdict(lambda: {"total": 0.0, "code": "", "label": ""})
+        income_agg = defaultdict(
+            lambda: {"total": 0.0, "code": "", "label": "", "is_operational": True}
+        )
         for ie in income_entries:
             cid = ie.income_category_id
             income_agg[cid]["total"] += ie.amount or 0.0
             if ie.income_category:
                 income_agg[cid]["code"] = ie.income_category.code
                 income_agg[cid]["label"] = ie.income_category.label
+                income_agg[cid]["is_operational"] = ie.income_category.is_operational
         for cid, data in sorted(income_agg.items()):
             if data["total"]:
-                items.append(IncomeItem(account_code=data["code"], description=data["label"] or data["code"], total=data["total"], auto_total=data["total"]))
+                items.append(IncomeItem(
+                    account_code=data["code"], description=data["label"] or data["code"],
+                    total=data["total"], auto_total=data["total"],
+                    is_operational=data["is_operational"],
+                ))
                 total += data["total"]
                 total_auto += data["total"]
 
@@ -651,7 +709,9 @@ def simulate_income(
     # dikelompokkan per kategori pendapatan tujuan. Berlaku untuk UNIT maupun
     # CABANG penerima.
     subsidies_in = crud_subsidy.list_active_by_recipient(db, org.id)
-    subsidy_income_agg = defaultdict(lambda: {"total": 0.0, "code": "", "label": ""})
+    subsidy_income_agg = defaultdict(
+        lambda: {"total": 0.0, "code": "", "label": "", "is_operational": True}
+    )
     for sub in subsidies_in:
         amount = sub.amount or 0.0
         if not amount:
@@ -661,6 +721,7 @@ def simulate_income(
         if sub.income_category:
             subsidy_income_agg[key]["code"] = sub.income_category.code
             subsidy_income_agg[key]["label"] = sub.income_category.label
+            subsidy_income_agg[key]["is_operational"] = sub.income_category.is_operational
     for data in subsidy_income_agg.values():
         provider_label = data["label"] or "Subsidi"
         items.append(IncomeItem(
@@ -668,6 +729,7 @@ def simulate_income(
             description=f"Subsidi diterima — {provider_label}",
             total=data["total"],
             auto_total=data["total"],
+            is_operational=data["is_operational"],
         ))
         total += data["total"]
         total_auto += data["total"]

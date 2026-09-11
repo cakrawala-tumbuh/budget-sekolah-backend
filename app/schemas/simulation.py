@@ -78,6 +78,7 @@ class IncomeItem(BaseModel):
     description: str
     total: float                   # final (override) amount
     auto_total: float              # amount using auto-calculated UP/US (ignores override)
+    is_operational: bool = True    # dari IncomeCategory.is_operational sumber item ini
 
 
 class IncomeSimulation(BaseModel):
